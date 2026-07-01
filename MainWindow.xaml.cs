@@ -1,10 +1,7 @@
-<<<<<<< ours
+using System;
 using System.Text;
-=======
-﻿using System;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
->>>>>>> theirs
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
