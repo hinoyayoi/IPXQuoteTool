@@ -1,0 +1,91 @@
+<Window x:Class="IPXQuoteTool.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:IPXQuoteTool"
+        mc:Ignorable="d"
+        Title="IPX报价工具" Height="360" Width="760" MinWidth="600" MinHeight="320">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Paths -->
+        <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Margin="4" Text="软件路径" />
+        <TextBox x:Name="txtSoftwarePath" Grid.Row="0" Grid.Column="1" Margin="4" MinWidth="420" Height="26" VerticalContentAlignment="Center" />
+        <Button x:Name="btnBrowseSoftware" Grid.Row="0" Grid.Column="2" Width="32" Height="26" Margin="4" Click="BrowseSoftware_Click">📁</Button>
+
+        <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="4" Text="图纸路径" />
+        <TextBox x:Name="txtDrawingPath" Grid.Row="1" Grid.Column="1" Margin="4" MinWidth="420" Height="26" VerticalContentAlignment="Center" />
+        <Button x:Name="btnBrowseDrawing" Grid.Row="1" Grid.Column="2" Width="32" Height="26" Margin="4" Click="BrowseDrawing_Click">📁</Button>
+
+        <TextBlock Grid.Row="2" Grid.Column="0" VerticalAlignment="Center" Margin="4" Text="报表路径" />
+        <TextBox x:Name="txtReportPath" Grid.Row="2" Grid.Column="1" Margin="4" MinWidth="420" Height="26" VerticalContentAlignment="Center" />
+        <Button x:Name="btnBrowseReport" Grid.Row="2" Grid.Column="2" Width="32" Height="26" Margin="4" Click="BrowseReport_Click">📁</Button>
+
+        <!-- Discounts -->
+        <TextBlock Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3" Margin="8" VerticalAlignment="Center" Text="图纸折扣系数" FontWeight="SemiBold" HorizontalAlignment="Center" FontSize="14" />
+
+        <Grid Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" HorizontalAlignment="Center" Margin="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <!-- Part -->
+            <StackPanel Grid.Column="0" Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,36,0">
+                <TextBlock Text="零件" Margin="0,4" HorizontalAlignment="Center" FontSize="12" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBox x:Name="tbPartDiscount" Width="64" Height="28" Text="0.5" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus" />
+                    <StackPanel Orientation="Vertical" Margin="6,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="btnPartUp" Content="▲" Width="28" Height="16" Click="PartUp_Click" />
+                        <Button x:Name="btnPartDown" Content="▼" Width="28" Height="16" Click="PartDown_Click" Margin="0,4,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Assembly -->
+            <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Center" Margin="0,0,36,0">
+                <TextBlock Text="装配" Margin="0,4" HorizontalAlignment="Center" FontSize="12" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBox x:Name="tbAssemblyDiscount" Width="64" Height="28" Text="0.4" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus" />
+                    <StackPanel Orientation="Vertical" Margin="6,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="btnAssemblyUp" Content="▲" Width="28" Height="16" Click="AssemblyUp_Click" />
+                        <Button x:Name="btnAssemblyDown" Content="▼" Width="28" Height="16" Click="AssemblyDown_Click" Margin="0,4,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Drawing -->
+            <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Center">
+                <TextBlock Text="工程图" Margin="0,4" HorizontalAlignment="Center" FontSize="12" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                    <TextBox x:Name="tbDrawingDiscount" Width="64" Height="28" Text="0.8" VerticalContentAlignment="Center" HorizontalContentAlignment="Center" PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus" />
+                    <StackPanel Orientation="Vertical" Margin="6,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="btnDrawingUp" Content="▲" Width="28" Height="16" Click="DrawingUp_Click" />
+                        <Button x:Name="btnDrawingDown" Content="▼" Width="28" Height="16" Click="DrawingDown_Click" Margin="0,4,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Run Button -->
+        <Button x:Name="btnRun" Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="3" Width="140" Height="44" HorizontalAlignment="Center" Margin="12" Click="BtnRun_Click" FontSize="14">运行</Button>
+
+        <!-- Progress bar -->
+        <ProgressBar x:Name="progressBar" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="3" Height="12" Margin="8" Minimum="0" Maximum="100" />
+    </Grid>
+</Window>
