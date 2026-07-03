@@ -1,23 +1,53 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 
 namespace IPXQuoteTool
 {
-    /// <summary>
-    /// Interaction logic for MainWindow.xaml
-    /// </summary>
     public partial class MainWindow : Window
     {
+        private SolidWorksService _swService;
+
         public MainWindow()
         {
             InitializeComponent();
+            _swService = new SolidWorksService();
+            Log("IPX报价工具已启动");
+            Log("等待用户配置...");
+        }
+
+        private void Log(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\n");
+                txtLog.ScrollToEnd();
+            });
+        }
+
+        private void LogError(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] ❌ {message}\n");
+                txtLog.ScrollToEnd();
+            });
+        }
+
+        private void LogSuccess(string message)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                txtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ {message}\n");
+                txtLog.ScrollToEnd();
+            });
         }
 
         private void BrowseFolder(System.Windows.Controls.TextBox target)
@@ -38,11 +68,52 @@ namespace IPXQuoteTool
             }
         }
 
+        private void BrowseFile(System.Windows.Controls.TextBox target)
+        {
+            using (var dlg = new WinForms.OpenFileDialog())
+            {
+                dlg.Filter = "SolidWorks文件 (*.sldprt;*.sldasm;*.slddrw)|*.sldprt;*.sldasm;*.slddrw|所有文件 (*.*)|*.*";
+                dlg.Multiselect = false;
+
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(target.Text))
+                    {
+                        if (File.Exists(target.Text))
+                        {
+                            dlg.FileName = target.Text;
+                        }
+                        else if (Directory.Exists(target.Text))
+                        {
+                            dlg.InitialDirectory = target.Text;
+                        }
+                    }
+                }
+                catch { }
+
+                var res = dlg.ShowDialog();
+                if (res == WinForms.DialogResult.OK)
+                {
+                    target.Text = dlg.FileName;
+                }
+            }
+        }
+
         private void BrowseSoftware_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtSoftwarePath);
-        private void BrowseDrawing_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtDrawingPath);
+        private void BrowseDrawing_Click(object sender, RoutedEventArgs e) => BrowseFile(txtDrawingPath);
         private void BrowseReport_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtReportPath);
 
-        // Allow only digits and one decimal point, and at most one digit after decimal
+        private void BtnOpenFile_Click(object sender, RoutedEventArgs e)
+        {
+            BrowseFile(txtDrawingPath);
+        }
+
+        private void BtnClearLog_Click(object sender, RoutedEventArgs e)
+        {
+            txtLog.Clear();
+            Log("日志已清空");
+        }
+
         private void Discount_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
             var tb = sender as System.Windows.Controls.TextBox;
@@ -53,7 +124,6 @@ namespace IPXQuoteTool
             }
             newText = newText.Insert(tb.SelectionStart, e.Text);
 
-            // Valid pattern: optional digit, optional . and optional one digit
             var regex = new Regex("^$|^[0-9](\\.[0-9]?)?$");
             e.Handled = !regex.IsMatch(newText);
         }
@@ -98,16 +168,152 @@ namespace IPXQuoteTool
         private async void BtnRun_Click(object sender, RoutedEventArgs e)
         {
             btnRun.IsEnabled = false;
-            progressBar.IsIndeterminate = true;
+            txtProgressText.Text = "准备中...";
+            txtPartCount.Text = "0";
+            txtAssemblyCount.Text = "0";
+            txtDrawingCount.Text = "0";
+
             try
             {
-                // Simulate work - replace with real business logic
-                await Task.Delay(1500);
+                if (string.IsNullOrWhiteSpace(txtSoftwarePath.Text))
+                {
+                    LogError("请选择 SolidWorks 安装路径！");
+                    MessageBox.Show("请选择 SolidWorks 安装路径！");
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(txtDrawingPath.Text))
+                {
+                    LogError("请选择图纸路径！");
+                    MessageBox.Show("请选择图纸路径！");
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(txtReportPath.Text))
+                {
+                    LogError("请选择报表保存路径！");
+                    MessageBox.Show("请选择报表保存路径！");
+                    return;
+                }
+
+                Log("=");
+                Log("开始处理...");
+                Log($"SolidWorks路径: {txtSoftwarePath.Text}");
+                Log($"图纸路径: {txtDrawingPath.Text}");
+                Log($"报表路径: {txtReportPath.Text}");
+
+                txtProgressText.Text = "连接 SolidWorks...";
+
+                if (!_swService.ConnectOrStart(txtSoftwarePath.Text))
+                {
+                    LogError("无法连接到 SolidWorks，请确保 SolidWorks 已安装并正常运行！");
+                    MessageBox.Show("无法连接到 SolidWorks，请确保 SolidWorks 已安装并正常运行！");
+                    return;
+                }
+
+                LogSuccess("成功连接到 SolidWorks");
+
+                txtProgressText.Text = "扫描文件...";
+
+                string drawingPath = txtDrawingPath.Text;
+                List<string> files;
+
+                if (File.Exists(drawingPath))
+                {
+                    files = new List<string> { drawingPath };
+                }
+                else if (Directory.Exists(drawingPath))
+                {
+                    files = _swService.GetSolidWorksFiles(drawingPath);
+                }
+                else
+                {
+                    LogError("指定的图纸路径无效！");
+                    MessageBox.Show("指定的图纸路径无效！");
+                    return;
+                }
+
+                if (files.Count == 0)
+                {
+                    LogError("未找到 SolidWorks 文件（.sldprt/.sldasm/.slddrw）！");
+                    MessageBox.Show("未找到 SolidWorks 文件（.sldprt/.sldasm/.slddrw）！");
+                    return;
+                }
+
+                Log($"找到 {files.Count} 个 SolidWorks 文件");
+
+                txtProgressText.Text = "处理文档...";
+
+                var results = new List<DocumentInfo>();
+                int partCount = 0;
+                int assemblyCount = 0;
+                int drawingCount = 0;
+
+                for (int i = 0; i < files.Count; i++)
+                {
+                    var file = files[i];
+                    var info = _swService.ProcessDocument(file);
+                    
+                    if (info != null)
+                    {
+                        results.Add(info);
+                        
+                        switch (info.DocumentType)
+                        {
+                            case SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART:
+                                partCount++;
+                                break;
+                            case SolidWorks.Interop.swconst.swDocumentTypes_e.swDocASSEMBLY:
+                                assemblyCount++;
+                                break;
+                            case SolidWorks.Interop.swconst.swDocumentTypes_e.swDocDRAWING:
+                                drawingCount++;
+                                break;
+                        }
+
+                        Log($"处理完成: {info.FileName} ({info.Category})");
+                    }
+                    else
+                    {
+                        LogError($"处理失败: {Path.GetFileName(file)}");
+                    }
+
+                    Dispatcher.Invoke(() =>
+                    {
+                        txtProgressText.Text = $"处理中 ({i + 1}/{files.Count})";
+                        txtPartCount.Text = partCount.ToString();
+                        txtAssemblyCount.Text = assemblyCount.ToString();
+                        txtDrawingCount.Text = drawingCount.ToString();
+                    });
+
+                    await Task.Delay(10);
+                }
+
+                txtProgressText.Text = "生成报表...";
+
+                var reportContent = _swService.GenerateReport(results);
+                bool saveSuccess = _swService.SaveReport(txtReportPath.Text, reportContent);
+
+                txtProgressText.Text = "完成";
+
+                if (saveSuccess)
+                {
+                    LogSuccess($"处理完成！共处理 {results.Count} 个文件");
+                    LogSuccess($"报表已保存到: {txtReportPath.Text}");
+                    MessageBox.Show($"处理完成！\n\n零件: {partCount}\n装配: {assemblyCount}\n工程图: {drawingCount}\n\n报表已保存到: {txtReportPath.Text}");
+                }
+                else
+                {
+                    LogError("报表保存失败");
+                    MessageBox.Show($"处理完成！\n共处理 {results.Count} 个文件\n报表保存失败，请检查路径权限。");
+                }
+            }
+            catch (Exception ex)
+            {
+                LogError($"处理过程中出错：{ex.Message}");
+                LogError($"异常详情：{ex.StackTrace}");
+                MessageBox.Show($"处理过程中出错：\n{ex.Message}");
             }
             finally
             {
-                progressBar.IsIndeterminate = false;
-                progressBar.Value = 100;
                 btnRun.IsEnabled = true;
             }
         }
