@@ -1,5 +1,7 @@
 using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using IPXQuoteTool.Analysis;
+using IPXQuoteTool.Reporting;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -14,6 +16,14 @@ namespace IPXQuoteTool
     public class SolidWorksService
     {
         private SldWorks _swApp;
+        private readonly DocumentAnalyzer _documentAnalyzer;
+        private readonly IReportGenerator _reportGenerator;
+
+        public SolidWorksService()
+        {
+            _documentAnalyzer = new DocumentAnalyzer();
+            _reportGenerator = new TextReportGenerator();
+        }
 
         public bool ConnectOrStart(string swInstallPath, int timeoutSeconds = 60)
         {
@@ -379,293 +389,12 @@ namespace IPXQuoteTool
 
         public DocumentInfo GetDocumentInfo(ModelDoc2 model)
         {
-            var info = new DocumentInfo
-            {
-                FileName = Path.GetFileName(model.GetPathName()),
-                FilePath = model.GetPathName(),
-                DocumentType = (swDocumentTypes_e)model.GetType(),
-                ConfigurationCount = GetConfigurationCount(model)
-            };
-
-            switch (info.DocumentType)
-            {
-                case swDocumentTypes_e.swDocPART:
-                    info.FeatureCount = CountFeatures(model);
-                    break;
-
-                case swDocumentTypes_e.swDocASSEMBLY:
-                    var compInfo = TraverseAssembly(model);
-                    info.ComponentCount = compInfo.Sum(c => c.Quantity);
-                    info.MateCount = CountMates(model);
-                    info.AssemblyFeatureCount = CountAssemblyFeatures(model);
-                    break;
-
-                case swDocumentTypes_e.swDocDRAWING:
-                    var drawInfo = TraverseDrawing(model);
-                    info.ViewCount = drawInfo.Sum(d => d.ViewCount);
-                    info.NoteCount = drawInfo.Sum(d => d.NoteCount);
-                    info.DimensionCount = drawInfo.Sum(d => d.DimensionCount);
-                    info.TableCount = drawInfo.Sum(d => d.TableCount);
-                    break;
-            }
-
-            return info;
-        }
-
-        private int GetConfigurationCount(ModelDoc2 model)
-        {
-            try
-            {
-                object configsObj = model.GetConfigurationNames();
-                if (configsObj != null)
-                {
-                    Array configs = configsObj as Array;
-                    return configs?.Length ?? 0;
-                }
-            }
-            catch { }
-            return 0;
-        }
-
-        private int CountFeatures(ModelDoc2 model)
-        {
-            int count = 0;
-            try
-            {
-                Feature feat = (Feature)model.FirstFeature();
-                while (feat != null)
-                {
-                    string typeName = feat.GetTypeName();
-                    if (!IsIgnoredFeature(typeName))
-                    {
-                        count++;
-                        Debug.WriteLine($"特征: {feat.Name} ({typeName})");
-                    }
-                    feat = (Feature)feat.GetNextFeature();
-                }
-            }
-            catch { }
-            return count;
-        }
-
-        private bool IsIgnoredFeature(string typeName)
-        {
-            if (string.IsNullOrEmpty(typeName)) return true;
-            
-            string lowerTypeName = typeName.ToLower();
-            string[] ignoredTypes = {
-                "refplane", "refaxis", "coordinatesystem", 
-                "sketch", "note", "material", "folder",
-                "sensor", "light", "origin", "displaystate",
-                "solidbodyfolder", "surfacebodyfolder",
-                "datumcurve", "curve", "modeldocannotation"
-            };
-            return ignoredTypes.Any(t => lowerTypeName.Contains(t));
-        }
-
-        public List<ComponentInfo> TraverseAssembly(ModelDoc2 model)
-        {
-            var components = new List<ComponentInfo>();
-            try
-            {
-                Configuration conf = (Configuration)model.GetActiveConfiguration();
-                Component2 rootComp = (Component2)conf.GetRootComponent();
-                TraverseComponentRecursive(rootComp, components, 0);
-            }
-            catch { }
-            return components;
-        }
-
-        private void TraverseComponentRecursive(Component2 comp, List<ComponentInfo> list, int level)
-        {
-            if (comp == null) return;
-
-            int quantity = 1;
-            try
-            {
-                dynamic dynComp = comp;
-                try { quantity = (int)dynComp.GetCount(); }
-                catch { try { quantity = (int)dynComp.GetCount2(false); } catch { } }
-            }
-            catch { }
-
-            list.Add(new ComponentInfo
-            {
-                Name = comp.Name2,
-                Level = level,
-                Configuration = comp.ReferencedConfiguration,
-                Quantity = quantity
-            });
-
-            try
-            {
-                object childrenObj = comp.GetChildren();
-                if (childrenObj != null)
-                {
-                    Array children = childrenObj as Array;
-                    foreach (var child in children)
-                    {
-                        TraverseComponentRecursive((Component2)child, list, level + 1);
-                    }
-                }
-            }
-            catch { }
-        }
-
-        private int CountMates(ModelDoc2 model)
-        {
-            try
-            {
-                dynamic assemblyDoc = model;
-                try { return (int)assemblyDoc.GetMatesCount(); }
-                catch
-                {
-                    try
-                    {
-                        object mates = assemblyDoc.GetMates(true);
-                        if (mates != null)
-                        {
-                            Array matesArray = mates as Array;
-                            return matesArray?.Length ?? 0;
-                        }
-                    }
-                    catch { }
-                    return 0;
-                }
-            }
-            catch { return 0; }
-        }
-
-        private int CountAssemblyFeatures(ModelDoc2 model)
-        {
-            int count = 0;
-            try
-            {
-                Feature feat = (Feature)model.FirstFeature();
-                while (feat != null)
-                {
-                    string typeName = feat.GetTypeName();
-                    if (typeName.Contains("Assembly") || 
-                        typeName.Contains("Pattern") || 
-                        typeName.Contains("Mate"))
-                    {
-                        count++;
-                    }
-                    feat = (Feature)feat.GetNextFeature();
-                }
-            }
-            catch { }
-            return count;
-        }
-
-        public List<DrawingInfo> TraverseDrawing(ModelDoc2 model)
-        {
-            var drawings = new List<DrawingInfo>();
-            try
-            {
-                DrawingDoc drawingDoc = (DrawingDoc)model;
-
-                object sheetNamesObj = drawingDoc.GetSheetNames();
-                Array sheetNames = sheetNamesObj as Array;
-                foreach (string sheetName in sheetNames)
-                {
-                    drawingDoc.ActivateSheet(sheetName);
-                    Sheet sheet = (Sheet)drawingDoc.GetCurrentSheet();
-
-                    object viewsObj = sheet.GetViews();
-                    Array views = viewsObj as Array;
-                    
-                    int noteCount = 0;
-                    int dimensionCount = 0;
-
-                    foreach (View view in views)
-                    {
-                        noteCount += view.GetNoteCount();
-                        dimensionCount += CountDimensionsInView(view);
-                    }
-
-                    drawings.Add(new DrawingInfo
-                    {
-                        SheetName = sheetName,
-                        ViewCount = views.Length,
-                        NoteCount = noteCount,
-                        DimensionCount = dimensionCount,
-                        TableCount = CountTablesInSheet(sheet)
-                    });
-                }
-            }
-            catch { }
-
-            return drawings;
-        }
-
-        private int CountDimensionsInView(View view)
-        {
-            int count = 0;
-            try
-            {
-                object dimensionsObj = view.GetDisplayDimensions();
-                Array dimensions = dimensionsObj as Array;
-                count = dimensions?.Length ?? 0;
-            }
-            catch { }
-            return count;
-        }
-
-        private int CountTablesInSheet(Sheet sheet)
-        {
-            int count = 0;
-            try
-            {
-                dynamic dynSheet = sheet;
-                try
-                {
-                    object tablesObj = dynSheet.GetTables();
-                    Array tables = tablesObj as Array;
-                    count = tables?.Length ?? 0;
-                }
-                catch
-                {
-                    try
-                    {
-                        object tablesObj = dynSheet.GetTables2();
-                        Array tables = tablesObj as Array;
-                        count = tables?.Length ?? 0;
-                    }
-                    catch { }
-                }
-            }
-            catch { }
-            return count;
+            return _documentAnalyzer.Analyze(model);
         }
 
         public string GenerateReport(List<DocumentInfo> documents)
         {
-            var sb = new StringBuilder();
-            
-            var parts = documents.Where(d => d.DocumentType == swDocumentTypes_e.swDocPART).ToList();
-            var assemblies = documents.Where(d => d.DocumentType == swDocumentTypes_e.swDocASSEMBLY).ToList();
-            var drawings = documents.Where(d => d.DocumentType == swDocumentTypes_e.swDocDRAWING).ToList();
-
-            sb.AppendLine($"{"图纸名",-35} {"类别",-8} {"特征",-6} {"配置项",-8} {"表达式",-8} {"视图",-6} {"标注",-6} {"表格",-6} {"组件数",-8} {"装配约束",-10} {"装配特征",-10}");
-            sb.AppendLine(new string('-', 150));
-
-            foreach (var doc in parts)
-            {
-                sb.AppendLine($"{doc.FileName,-35} {doc.Category,-8} {doc.FeatureCount,-6} {doc.ConfigurationCount,-8} {0,-8} {0,-6} {0,-6} {0,-6} {0,-8} {0,-10} {0,-10}");
-            }
-
-            foreach (var doc in assemblies)
-            {
-                sb.AppendLine($"{doc.FileName,-35} {doc.Category,-8} {0,-6} {doc.ConfigurationCount,-8} {0,-8} {0,-6} {0,-6} {0,-6} {doc.ComponentCount,-8} {doc.MateCount,-10} {doc.AssemblyFeatureCount,-10}");
-            }
-
-            foreach (var doc in drawings)
-            {
-                sb.AppendLine($"{doc.FileName,-35} {doc.Category,-8} {0,-6} {doc.ConfigurationCount,-8} {0,-8} {doc.ViewCount,-6} {doc.DimensionCount,-6} {doc.TableCount,-6} {0,-8} {0,-10} {0,-10}");
-            }
-
-            return sb.ToString();
+            return _reportGenerator.Generate(documents);
         }
 
         public bool SaveReport(string reportPath, string content)
