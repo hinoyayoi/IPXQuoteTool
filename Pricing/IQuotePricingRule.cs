@@ -1,4 +1,4 @@
-namespace IPXQuoteTool.Pricing
+﻿namespace IPXQuoteTool.Pricing
 {
     public interface IQuotePricingRule
     {

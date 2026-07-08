@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using IPXQuoteTool.Settings;
 using WinForms = System.Windows.Forms;
 
 namespace IPXQuoteTool
@@ -14,11 +15,14 @@ namespace IPXQuoteTool
     public partial class MainWindow : Window
     {
         private SolidWorksService _swService;
+        private UserPathSettingsService _pathSettingsService;
 
         public MainWindow()
         {
             InitializeComponent();
             _swService = new SolidWorksService();
+            _pathSettingsService = new UserPathSettingsService();
+            LoadSavedPaths();
             Log("IPX报价工具已启动");
             Log("等待用户配置...");
         }
@@ -50,13 +54,23 @@ namespace IPXQuoteTool
             });
         }
 
-        private void BrowseFolder(System.Windows.Controls.TextBox target)
+        private bool BrowseFolder(System.Windows.Controls.TextBox target)
         {
             using (var dlg = new WinForms.FolderBrowserDialog())
             {
                 try
                 {
-                    if (!string.IsNullOrWhiteSpace(target.Text)) dlg.SelectedPath = target.Text;
+                    if (!string.IsNullOrWhiteSpace(target.Text))
+                    {
+                        if (Directory.Exists(target.Text))
+                        {
+                            dlg.SelectedPath = target.Text;
+                        }
+                        else if (File.Exists(target.Text))
+                        {
+                            dlg.SelectedPath = Path.GetDirectoryName(target.Text);
+                        }
+                    }
                 }
                 catch { }
 
@@ -64,8 +78,12 @@ namespace IPXQuoteTool
                 if (res == WinForms.DialogResult.OK)
                 {
                     target.Text = dlg.SelectedPath;
+                    SaveCurrentPaths();
+                    return true;
                 }
             }
+
+            return false;
         }
 
         private void BrowseFile(System.Windows.Controls.TextBox target)
@@ -95,17 +113,38 @@ namespace IPXQuoteTool
                 if (res == WinForms.DialogResult.OK)
                 {
                     target.Text = dlg.FileName;
+                    SaveCurrentPaths();
                 }
             }
         }
 
         private void BrowseSoftware_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtSoftwarePath);
-        private void BrowseDrawing_Click(object sender, RoutedEventArgs e) => BrowseFile(txtDrawingPath);
+        private void BrowseDrawing_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtDrawingPath);
         private void BrowseReport_Click(object sender, RoutedEventArgs e) => BrowseFolder(txtReportPath);
 
         private void BtnOpenFile_Click(object sender, RoutedEventArgs e)
         {
-            BrowseFile(txtDrawingPath);
+            BrowseFolder(txtDrawingPath);
+        }
+
+        private void LoadSavedPaths()
+        {
+            var settings = _pathSettingsService.Load();
+            txtSoftwarePath.Text = settings.SolidWorksPath ?? string.Empty;
+            txtDrawingPath.Text = settings.DrawingFolderPath ?? string.Empty;
+            txtReportPath.Text = settings.ReportFolderPath ?? string.Empty;
+            chkOfflineMode.IsChecked = settings.UseOfflineDocumentManager;
+        }
+
+        private void SaveCurrentPaths()
+        {
+            _pathSettingsService.Save(new UserPathSettings
+            {
+                SolidWorksPath = txtSoftwarePath.Text,
+                DrawingFolderPath = txtDrawingPath.Text,
+                ReportFolderPath = txtReportPath.Text,
+                UseOfflineDocumentManager = chkOfflineMode.IsChecked == true
+            });
         }
 
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
@@ -175,7 +214,9 @@ namespace IPXQuoteTool
 
             try
             {
-                if (string.IsNullOrWhiteSpace(txtSoftwarePath.Text))
+                bool useOfflineMode = chkOfflineMode.IsChecked == true;
+
+                if (!useOfflineMode && string.IsNullOrWhiteSpace(txtSoftwarePath.Text))
                 {
                     LogError("请选择 SolidWorks 安装路径！");
                     MessageBox.Show("请选择 SolidWorks 安装路径！");
@@ -194,33 +235,41 @@ namespace IPXQuoteTool
                     return;
                 }
 
+                SaveCurrentPaths();
+
                 Log("=");
                 Log("开始处理...");
                 Log($"SolidWorks路径: {txtSoftwarePath.Text}");
                 Log($"图纸路径: {txtDrawingPath.Text}");
                 Log($"报表路径: {txtReportPath.Text}");
 
-                txtProgressText.Text = "连接 SolidWorks...";
-
-                if (!_swService.ConnectOrStart(txtSoftwarePath.Text))
+                if (!useOfflineMode)
                 {
-                    LogError("无法连接到 SolidWorks，请确保 SolidWorks 已安装并正常运行！");
-                    MessageBox.Show("无法连接到 SolidWorks，请确保 SolidWorks 已安装并正常运行！");
-                    return;
-                }
+                    txtProgressText.Text = "连接 SolidWorks...";
 
-                LogSuccess("成功连接到 SolidWorks");
+                    if (!_swService.ConnectOrStart(txtSoftwarePath.Text))
+                    {
+                        string error = string.IsNullOrWhiteSpace(_swService.LastError)
+                            ? "无法连接到 SolidWorks，请确认 SolidWorks 已安装并正常运行。"
+                            : _swService.LastError;
+                        LogError(error);
+                        MessageBox.Show(error);
+                        return;
+                    }
+
+                    LogSuccess("成功连接到 SolidWorks");
+                }
+                else
+                {
+                    Log("离线读取模式：跳过 SolidWorks 启动和连接。");
+                }
 
                 txtProgressText.Text = "扫描文件...";
 
                 string drawingPath = txtDrawingPath.Text;
                 List<string> files;
 
-                if (File.Exists(drawingPath))
-                {
-                    files = new List<string> { drawingPath };
-                }
-                else if (Directory.Exists(drawingPath))
+                if (Directory.Exists(drawingPath))
                 {
                     files = _swService.GetSolidWorksFiles(drawingPath);
                 }
@@ -246,11 +295,26 @@ namespace IPXQuoteTool
                 int partCount = 0;
                 int assemblyCount = 0;
                 int drawingCount = 0;
+                OfflineDocumentManagerService offlineService = null;
+
+                if (useOfflineMode)
+                {
+                    string documentManagerLicenseKey = _pathSettingsService.Load().DocumentManagerLicenseKey;
+                    offlineService = new OfflineDocumentManagerService(documentManagerLicenseKey);
+                    if (!offlineService.Initialize())
+                    {
+                        LogError(offlineService.LastError);
+                        MessageBox.Show(offlineService.LastError);
+                        return;
+                    }
+                }
 
                 for (int i = 0; i < files.Count; i++)
                 {
                     var file = files[i];
-                    var info = _swService.ProcessDocument(file);
+                    var info = useOfflineMode
+                        ? offlineService.ProcessDocument(file)
+                        : _swService.ProcessDocument(file);
                     
                     if (info != null)
                     {
@@ -274,6 +338,10 @@ namespace IPXQuoteTool
                     else
                     {
                         LogError($"处理失败: {Path.GetFileName(file)}");
+                        if (useOfflineMode && !string.IsNullOrWhiteSpace(offlineService.LastError))
+                        {
+                            LogError(offlineService.LastError);
+                        }
                     }
 
                     Dispatcher.Invoke(() =>

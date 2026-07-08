@@ -1,4 +1,4 @@
-using SolidWorks.Interop.sldworks;
+﻿using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using IPXQuoteTool.Analysis.Assemblies;
 using IPXQuoteTool.Analysis.Drawings;

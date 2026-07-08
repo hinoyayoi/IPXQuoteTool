@@ -1,4 +1,4 @@
-using SolidWorks.Interop.swconst;
+﻿using SolidWorks.Interop.swconst;
 
 namespace IPXQuoteTool.Analysis.Parts
 {
