@@ -5,6 +5,6 @@ namespace IPXQuoteTool.Reporting
 {
     public interface IReportGenerator
     {
-        string Generate(IReadOnlyList<DocumentInfo> documents, QuotePricingSettings pricingSettings);
+        byte[] Generate(IReadOnlyList<DocumentInfo> documents, QuotePricingSettings pricingSettings);
     }
 }

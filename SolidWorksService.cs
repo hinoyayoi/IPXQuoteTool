@@ -10,7 +10,6 @@ using System.IO;
 using System.Linq;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 
 namespace IPXQuoteTool
@@ -473,12 +472,12 @@ namespace IPXQuoteTool
             return _documentAnalyzer.Analyze(model);
         }
 
-        public string GenerateReport(List<DocumentInfo> documents, QuotePricingSettings pricingSettings)
+        public byte[] GenerateReport(List<DocumentInfo> documents, QuotePricingSettings pricingSettings)
         {
             return _reportGenerator.Generate(documents, pricingSettings);
         }
 
-        public bool SaveReport(string reportPath, string content)
+        public bool SaveReport(string reportPath, byte[] content)
         {
             try
             {
@@ -487,8 +486,8 @@ namespace IPXQuoteTool
                     Directory.CreateDirectory(reportPath);
                 }
 
-                string filePath = Path.Combine(reportPath, $"报价报表_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
-                File.WriteAllText(filePath, content, Encoding.UTF8);
+                string filePath = Path.Combine(reportPath, $"报价报表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+                File.WriteAllBytes(filePath, content);
                 return true;
             }
             catch (Exception ex)
@@ -499,4 +498,5 @@ namespace IPXQuoteTool
         }
     }
 }
+
 
