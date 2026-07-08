@@ -1,6 +1,7 @@
 ﻿using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
 using IPXQuoteTool.Analysis;
+using IPXQuoteTool.Pricing;
 using IPXQuoteTool.Reporting;
 using System;
 using System.Collections.Generic;
@@ -472,9 +473,9 @@ namespace IPXQuoteTool
             return _documentAnalyzer.Analyze(model);
         }
 
-        public string GenerateReport(List<DocumentInfo> documents)
+        public string GenerateReport(List<DocumentInfo> documents, QuotePricingSettings pricingSettings)
         {
-            return _reportGenerator.Generate(documents);
+            return _reportGenerator.Generate(documents, pricingSettings);
         }
 
         public bool SaveReport(string reportPath, string content)
@@ -498,3 +499,4 @@ namespace IPXQuoteTool
         }
     }
 }
+

@@ -13,6 +13,7 @@ namespace IPXQuoteTool
         
         // 通用
         public int ConfigurationCount { get; set; }
+        public int ExpressionCount { get; set; }
         
         // 零件特有
         public int FeatureCount { get; set; }

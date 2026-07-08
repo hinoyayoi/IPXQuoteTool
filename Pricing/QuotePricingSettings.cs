@@ -5,5 +5,6 @@
         public double PartDiscount { get; set; } = 0.5;
         public double AssemblyDiscount { get; set; } = 0.4;
         public double DrawingDiscount { get; set; } = 0.8;
+        public ObjectCoefficientSettings ObjectCoefficients { get; set; } = ObjectCoefficientSettings.CreateDefault();
     }
 }

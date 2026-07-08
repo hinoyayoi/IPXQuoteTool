@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using IPXQuoteTool.Settings;
+using IPXQuoteTool.Pricing;
 using WinForms = System.Windows.Forms;
 
 namespace IPXQuoteTool
@@ -23,7 +24,9 @@ namespace IPXQuoteTool
             _swService = new SolidWorksService();
             _pathSettingsService = new UserPathSettingsService();
             LoadSavedPaths();
+            string coefficientFilePath = ObjectCoefficientSettingsService.EnsureDefaultFile();
             Log("IPX报价工具已启动");
+            Log($"对象系数表: {coefficientFilePath}");
             Log("等待用户配置...");
         }
 
@@ -204,6 +207,20 @@ namespace IPXQuoteTool
         private void DrawingUp_Click(object sender, RoutedEventArgs e) => ChangeDiscount(tbDrawingDiscount, 0.1);
         private void DrawingDown_Click(object sender, RoutedEventArgs e) => ChangeDiscount(tbDrawingDiscount, -0.1);
 
+        private QuotePricingSettings BuildPricingSettings()
+        {
+            FormatAndClamp(tbPartDiscount);
+            FormatAndClamp(tbAssemblyDiscount);
+            FormatAndClamp(tbDrawingDiscount);
+
+            return new QuotePricingSettings
+            {
+                PartDiscount = double.TryParse(tbPartDiscount.Text, out double partDiscount) ? partDiscount : 0.5,
+                AssemblyDiscount = double.TryParse(tbAssemblyDiscount.Text, out double assemblyDiscount) ? assemblyDiscount : 0.4,
+                DrawingDiscount = double.TryParse(tbDrawingDiscount.Text, out double drawingDiscount) ? drawingDiscount : 0.8,
+                ObjectCoefficients = ObjectCoefficientSettingsService.Load()
+            };
+        }
         private async void BtnRun_Click(object sender, RoutedEventArgs e)
         {
             btnRun.IsEnabled = false;
@@ -357,7 +374,9 @@ namespace IPXQuoteTool
 
                 txtProgressText.Text = "生成报表...";
 
-                var reportContent = _swService.GenerateReport(results);
+                var pricingSettings = BuildPricingSettings();
+                Log($"已读取对象系数表: {ObjectCoefficientSettingsService.GetDefaultFilePath()}");
+                var reportContent = _swService.GenerateReport(results, pricingSettings);
                 bool saveSuccess = _swService.SaveReport(txtReportPath.Text, reportContent);
 
                 txtProgressText.Text = "完成";
@@ -387,3 +406,4 @@ namespace IPXQuoteTool
         }
     }
 }
+

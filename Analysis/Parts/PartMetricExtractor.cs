@@ -9,6 +9,7 @@ namespace IPXQuoteTool.Analysis.Parts
         public void Extract(DocumentAnalysisContext context, DocumentInfo info)
         {
             info.FeatureCount = PartFeatureCounter.CountFeatures(context.Model);
+            info.ExpressionCount = SolidWorksEquationCounter.CountEquations(context.Model);
         }
     }
 }

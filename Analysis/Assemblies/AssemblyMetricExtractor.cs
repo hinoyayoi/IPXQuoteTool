@@ -16,6 +16,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             info.ComponentCount = components.Sum(c => c.Quantity);
             info.MateCount = CountMates(context.Model);
             info.AssemblyFeatureCount = CountAssemblyFeatures(context.Model);
+            info.ExpressionCount = SolidWorksEquationCounter.CountEquations(context.Model);
         }
 
         private static List<ComponentInfo> TraverseAssembly(ModelDoc2 model)
