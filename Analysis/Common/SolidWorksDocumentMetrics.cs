@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using SolidWorks.Interop.sldworks;
 
 namespace IPXQuoteTool.Analysis

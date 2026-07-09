@@ -1,4 +1,4 @@
-using SolidWorks.Interop.sldworks;
+﻿using SolidWorks.Interop.sldworks;
 using System.Linq;
 
 namespace IPXQuoteTool.Analysis.Parts

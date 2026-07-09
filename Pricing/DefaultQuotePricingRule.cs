@@ -1,4 +1,4 @@
-using SolidWorks.Interop.swconst;
+﻿using SolidWorks.Interop.swconst;
 
 namespace IPXQuoteTool.Pricing
 {
@@ -8,19 +8,31 @@ namespace IPXQuoteTool.Pricing
         {
             double score;
             double discount;
+            ObjectCoefficientSettings coefficients = settings.ObjectCoefficients ?? ObjectCoefficientSettings.CreateDefault();
 
             switch (document.DocumentType)
             {
                 case swDocumentTypes_e.swDocPART:
-                    score = document.FeatureCount + document.ConfigurationCount;
+                    score =
+                        document.FeatureCount * coefficients.PartFeature +
+                        document.ConfigurationCount * coefficients.PartConfiguration +
+                        document.ExpressionCount * coefficients.PartExpression;
                     discount = settings.PartDiscount;
                     break;
                 case swDocumentTypes_e.swDocASSEMBLY:
-                    score = document.ComponentCount + document.MateCount + document.AssemblyFeatureCount;
+                    score =
+                        document.ComponentCount * coefficients.AssemblyComponent +
+                        document.MateCount * coefficients.AssemblyMate +
+                        document.AssemblyFeatureCount * coefficients.AssemblyFeature +
+                        document.ConfigurationCount * coefficients.AssemblyConfiguration +
+                        document.ExpressionCount * coefficients.AssemblyExpression;
                     discount = settings.AssemblyDiscount;
                     break;
                 case swDocumentTypes_e.swDocDRAWING:
-                    score = document.ViewCount + document.DimensionCount + document.TableCount;
+                    score =
+                        document.ViewCount * coefficients.DrawingView +
+                        document.DimensionCount * coefficients.DrawingDimension +
+                        document.TableCount * coefficients.DrawingTable;
                     discount = settings.DrawingDiscount;
                     break;
                 default:

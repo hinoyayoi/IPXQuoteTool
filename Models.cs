@@ -1,4 +1,4 @@
-using SolidWorks.Interop.swconst;
+﻿using SolidWorks.Interop.swconst;
 
 namespace IPXQuoteTool
 {
@@ -13,6 +13,7 @@ namespace IPXQuoteTool
         
         // 通用
         public int ConfigurationCount { get; set; }
+        public int ExpressionCount { get; set; }
         
         // 零件特有
         public int FeatureCount { get; set; }
@@ -27,6 +28,9 @@ namespace IPXQuoteTool
         public int NoteCount { get; set; }
         public int DimensionCount { get; set; }
         public int TableCount { get; set; }
+
+        // 报表示例图
+        public byte[] PreviewImageBytes { get; set; }
 
         public string Category => DocumentType switch
         {

@@ -1,4 +1,4 @@
-<Window x:Class="IPXQuoteTool.MainWindow"
+﻿<Window x:Class="IPXQuoteTool.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -60,6 +60,23 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="DiscountTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Width" Value="60"/>
+            <Setter Property="Height" Value="32"/>
+            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="BorderBrush" Value="#CBD5E1"/>
+            <Setter Property="Background" Value="#FAFAFA"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="HorizontalContentAlignment" Value="Center"/>
+            <Style.Triggers>
+                <Trigger Property="IsFocused" Value="True">
+                    <Setter Property="BorderBrush" Value="#2563EB"/>
+                    <Setter Property="Background" Value="White"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
@@ -95,8 +112,8 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Content="📂 打开" Style="{StaticResource SecondaryButtonStyle}" Click="BtnOpenFile_Click"/>
-                    <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun" Margin="8,0,0,0"/>
+                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -111,7 +128,7 @@
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Column="0" Grid.Row="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
+            <Border x:Name="pathConfigPanel" Grid.Column="0" Grid.Row="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -130,7 +147,7 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="SolidWorks" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
                         <TextBox x:Name="txtSoftwarePath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="SolidWorks安装路径" Margin="0,0,8,0"/>
-                        <Button Grid.Column="2" Content="..." Width="36" Height="36" Click="BrowseSoftware_Click" 
+                        <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseSoftware_Click" ToolTip="选择 SolidWorks 目录" 
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
 
@@ -140,9 +157,9 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="图纸文件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                        <TextBox x:Name="txtDrawingPath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="图纸文件或文件夹路径" Margin="0,0,8,0"/>
-                        <Button Grid.Column="2" Content="..." Width="36" Height="36" Click="BrowseDrawing_Click" 
+                        <TextBlock Text="图纸目录" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
+                        <TextBox x:Name="txtDrawingPath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="图纸目录或文件夹路径" Margin="0,0,8,0"/>
+                        <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseDrawing_Click" ToolTip="选择图纸目录" 
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
 
@@ -154,13 +171,13 @@
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="报表保存" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
                         <TextBox x:Name="txtReportPath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="报表保存路径" Margin="0,0,8,0"/>
-                        <Button Grid.Column="2" Content="..." Width="36" Height="36" Click="BrowseReport_Click" 
+                        <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseReport_Click" ToolTip="选择报表保存目录" 
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
                 </Grid>
             </Border>
 
-            <Border Grid.Column="1" Grid.Row="0" Style="{StaticResource CardStyle}">
+            <Border x:Name="discountPanel" Grid.Column="1" Grid.Row="0" Style="{StaticResource CardStyle}">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -178,10 +195,9 @@
 
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,48,0">
                             <TextBlock Text="零件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbPartDiscount" Width="60" Height="32" Text="0.5" 
-                                     VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            <TextBox x:Name="tbPartDiscount" Text="0.5" 
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
-                                     Style="{StaticResource PathTextBoxStyle}"/>
+                                     Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="PartUp_Click" 
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
@@ -192,10 +208,9 @@
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,48,0">
                             <TextBlock Text="装配" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbAssemblyDiscount" Width="60" Height="32" Text="0.4" 
-                                     VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            <TextBox x:Name="tbAssemblyDiscount" Text="0.4" 
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
-                                     Style="{StaticResource PathTextBoxStyle}"/>
+                                     Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="AssemblyUp_Click" 
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
@@ -206,10 +221,9 @@
 
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="工程图" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbDrawingDiscount" Width="60" Height="32" Text="0.8" 
-                                     VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                            <TextBox x:Name="tbDrawingDiscount" Text="0.8" 
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
-                                     Style="{StaticResource PathTextBoxStyle}"/>
+                                     Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="DrawingUp_Click" 
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
@@ -260,7 +274,7 @@
                     <TextBlock x:Name="txtProgressText" Text="等待开始..." FontSize="12" Foreground="#334155" Margin="16,0,0,0"/>
                 </StackPanel>
 
-                <ProgressBar Grid.Column="1" Height="8" Margin="16,0" Minimum="0" Maximum="100" 
+                <ProgressBar x:Name="progressBar" Grid.Column="1" Height="8" Margin="16,0" Minimum="0" Maximum="100" Value="0" 
                              Background="#E2E8F0" BorderThickness="0">
                     <ProgressBar.Foreground>
                         <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
@@ -270,7 +284,7 @@
                     </ProgressBar.Foreground>
                 </ProgressBar>
 
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="零件: " FontSize="12" Foreground="#64748B"/>
                     <TextBlock x:Name="txtPartCount" Text="0" FontSize="12" FontWeight="SemiBold" Foreground="#2563EB"/>
                     <TextBlock Text="装配: " FontSize="12" Foreground="#64748B" Margin="12,0,0,0"/>
@@ -282,3 +296,6 @@
         </Border>
     </Grid>
 </Window>
+
+
+
