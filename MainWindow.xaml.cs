@@ -477,7 +477,14 @@ namespace IPXQuoteTool
                             break;
                     }
 
-                    Log($"处理完成: {info.FileName} ({info.Category})");
+                    string previewStatus = info.PreviewImageBytes?.Length > 0
+                        ? $"缩略图已获取，{info.PreviewImageBytes.Length / 1024.0:0.0} KB"
+                        : "未获取到缩略图";
+                    Log($"处理完成: {info.FileName} ({info.Category})，{previewStatus}");
+                    if (useOfflineMode && info.DocumentType == SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART)
+                    {
+                        Log("提示：离线读取模式无法读取零件 FeatureManager 特征树，零件特征数会显示为 0；如需统计特征数，请使用 SolidWorks 正常读取模式。");
+                    }
                 }
                 else
                 {

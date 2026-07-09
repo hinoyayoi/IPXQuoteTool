@@ -6,6 +6,8 @@ using IPXQuoteTool.Reporting;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using Microsoft.Win32;
@@ -434,6 +436,8 @@ namespace IPXQuoteTool
                     return null;
                 }
 
+                byte[] cachedPreviewImageBytes = TryGetPreviewImageBytes(filePath, null);
+
                 Debug.WriteLine($"正在打开文件: {filePath} (类型: {docType})");
 
                 ModelDoc2 model = (ModelDoc2)_swApp.OpenDoc6(
@@ -453,6 +457,10 @@ namespace IPXQuoteTool
                 Debug.WriteLine($"文件打开成功: {filePath}");
 
                 var info = GetDocumentInfo(model);
+                info.PreviewImageBytes =
+                    TryCaptureModelViewImageBytes(model, docType) ??
+                    cachedPreviewImageBytes ??
+                    TryGetPreviewImageBytes(filePath, model);
                 _swApp.CloseDoc(filePath);
 
                 Debug.WriteLine($"文件处理完成: {filePath}");
@@ -467,6 +475,175 @@ namespace IPXQuoteTool
             }
         }
 
+
+        private byte[] TryCaptureModelViewImageBytes(ModelDoc2 model, swDocumentTypes_e docType)
+        {
+            string bitmapPath = null;
+
+            try
+            {
+                if (model == null)
+                {
+                    return null;
+                }
+
+                bitmapPath = Path.Combine(Path.GetTempPath(), $"IPXQuote_capture_{Guid.NewGuid():N}.bmp");
+                PrepareModelViewForCapture(model, docType);
+
+                bool success = model.SaveBMP(bitmapPath, 520, 360);
+                if (!success || !File.Exists(bitmapPath))
+                {
+                    Debug.WriteLine($"实时视图截图未返回文件: {model.GetTitle()}");
+                    return null;
+                }
+
+                FileInfo bitmapFile = new FileInfo(bitmapPath);
+                if (bitmapFile.Length == 0)
+                {
+                    Debug.WriteLine($"实时视图截图返回空文件: {model.GetTitle()}");
+                    return null;
+                }
+
+                return ConvertBitmapFileToJpegBytes(bitmapPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"实时视图截图失败: {ex.Message}");
+                return null;
+            }
+            finally
+            {
+                try
+                {
+                    if (!string.IsNullOrWhiteSpace(bitmapPath) && File.Exists(bitmapPath))
+                    {
+                        File.Delete(bitmapPath);
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static void PrepareModelViewForCapture(ModelDoc2 model, swDocumentTypes_e docType)
+        {
+            try
+            {
+                if (docType == swDocumentTypes_e.swDocDRAWING)
+                {
+                    model.Extension?.ViewZoomToSheet();
+                }
+                else
+                {
+                    model.ShowNamedView2("*Isometric", (int)swStandardViews_e.swIsometricView);
+                    model.ViewZoomtofit2();
+
+                    if (model.IActiveView is ModelView activeView)
+                    {
+                        activeView.DisplayMode = (int)swDisplayMode_e.swSHADED_EDGES;
+                        activeView.DisplayZebraStripes = false;
+                    }
+                    else
+                    {
+                        model.ViewDisplayShaded();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"准备实时视图截图失败: {ex.Message}");
+            }
+        }
+
+        private byte[] TryGetPreviewImageBytes(string filePath, ModelDoc2 model)
+        {
+            if (_swApp == null || string.IsNullOrWhiteSpace(filePath))
+            {
+                return null;
+            }
+
+            foreach (string configurationName in GetPreviewConfigurationNames(model))
+            {
+                string bitmapPath = null;
+
+                try
+                {
+                    bitmapPath = Path.Combine(Path.GetTempPath(), $"IPXQuote_preview_{Guid.NewGuid():N}.bmp");
+                    bool success = _swApp.GetPreviewBitmapFile(filePath, configurationName, bitmapPath);
+                    if (!success || !File.Exists(bitmapPath))
+                    {
+                        Debug.WriteLine($"获取预览图未返回文件: {Path.GetFileName(filePath)}, 配置: {configurationName}");
+                        continue;
+                    }
+
+                    FileInfo bitmapFile = new FileInfo(bitmapPath);
+                    if (bitmapFile.Length == 0)
+                    {
+                        Debug.WriteLine($"获取预览图返回空文件: {Path.GetFileName(filePath)}, 配置: {configurationName}");
+                        continue;
+                    }
+
+                    byte[] imageBytes = ConvertBitmapFileToJpegBytes(bitmapPath);
+                    Debug.WriteLine($"获取预览图成功: {Path.GetFileName(filePath)}, 配置: {configurationName}, 字节: {imageBytes.Length}");
+                    return imageBytes;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"获取预览图失败 {filePath}, 配置: {configurationName}: {ex.Message}");
+                }
+                finally
+                {
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(bitmapPath) && File.Exists(bitmapPath))
+                        {
+                            File.Delete(bitmapPath);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static byte[] ConvertBitmapFileToJpegBytes(string bitmapPath)
+        {
+            using Image image = Image.FromFile(bitmapPath);
+            using var imageStream = new MemoryStream();
+            image.Save(imageStream, ImageFormat.Jpeg);
+            return imageStream.ToArray();
+        }
+
+        private static IEnumerable<string> GetPreviewConfigurationNames(ModelDoc2 model)
+        {
+            yield return string.Empty;
+
+            if (model == null)
+            {
+                yield break;
+            }
+
+            string activeConfigurationName = null;
+            try
+            {
+                if (model.GetActiveConfiguration() is Configuration configuration)
+                {
+                    activeConfigurationName = configuration.Name;
+                }
+            }
+            catch
+            {
+            }
+
+            if (!string.IsNullOrWhiteSpace(activeConfigurationName))
+            {
+                yield return activeConfigurationName;
+            }
+        }
         public DocumentInfo GetDocumentInfo(ModelDoc2 model)
         {
             return _documentAnalyzer.Analyze(model);
@@ -498,5 +675,6 @@ namespace IPXQuoteTool
         }
     }
 }
+
 
 

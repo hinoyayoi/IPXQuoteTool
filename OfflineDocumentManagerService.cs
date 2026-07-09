@@ -2,6 +2,7 @@
 using SolidWorks.Interop.swconst;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 
@@ -91,7 +92,8 @@ namespace IPXQuoteTool
                     FileName = Path.GetFileName(filePath),
                     FilePath = filePath,
                     DocumentType = GetSolidWorksDocumentType(dmDocumentType),
-                    ConfigurationCount = GetConfigurationCount(document)
+                    ConfigurationCount = GetConfigurationCount(document),
+                    PreviewImageBytes = TryGetPreviewImageBytes(document)
                 };
 
                 switch (info.DocumentType)
@@ -164,6 +166,157 @@ namespace IPXQuoteTool
             {
                 return 0;
             }
+        }
+
+        private static byte[] TryGetPreviewImageBytes(ISwDMDocument29 document)
+        {
+            byte[] documentPreview = TryGetDocumentPreviewImageBytes(document);
+            if (documentPreview?.Length > 0)
+            {
+                return documentPreview;
+            }
+
+            byte[] configurationPreview = TryGetConfigurationPreviewImageBytes(document);
+            if (configurationPreview?.Length > 0)
+            {
+                return configurationPreview;
+            }
+
+            return TryGetDrawingSheetPreviewImageBytes(document);
+        }
+
+        private static byte[] TryGetDocumentPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                if (document is ISwDMDocument11 documentWithPreview)
+                {
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(documentWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 文档预览图不可用: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 文档预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static byte[] TryGetConfigurationPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                SwDMConfigurationMgr configurationManager = document.ConfigurationManager;
+                if (configurationManager == null)
+                {
+                    return null;
+                }
+
+                foreach (string configurationName in GetConfigurationNames(configurationManager))
+                {
+                    SwDMConfiguration configuration = configurationManager.GetConfigurationByName(configurationName);
+                    if (configuration is not ISwDMConfiguration9 configurationWithPreview)
+                    {
+                        continue;
+                    }
+
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(configurationWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 配置预览图不可用: {configurationName}, {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 配置预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static byte[] TryGetDrawingSheetPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                object sheetsObj = document.GetSheets();
+                if (sheetsObj is not Array sheets)
+                {
+                    return null;
+                }
+
+                foreach (object sheetObj in sheets)
+                {
+                    if (sheetObj is not ISwDMSheet2 sheetWithPreview)
+                    {
+                        continue;
+                    }
+
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(sheetWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 图纸页预览图不可用: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 图纸页预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> GetConfigurationNames(SwDMConfigurationMgr configurationManager)
+        {
+            object namesObj = configurationManager.GetConfigurationNames();
+            if (namesObj is not Array names)
+            {
+                yield break;
+            }
+
+            foreach (object nameObj in names)
+            {
+                string name = nameObj as string;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    yield return name;
+                }
+            }
+        }
+
+        private static byte[] ConvertVariantByteArray(object value)
+        {
+            if (value is byte[] bytes)
+            {
+                return bytes;
+            }
+
+            if (value is not Array array || array.Length == 0)
+            {
+                return null;
+            }
+
+            var result = new byte[array.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                result[i] = Convert.ToByte(array.GetValue(i));
+            }
+
+            return result;
         }
 
         private static int SafeGetComponentCount(ISwDMDocument29 document)

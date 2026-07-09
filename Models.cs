@@ -29,6 +29,9 @@ namespace IPXQuoteTool
         public int DimensionCount { get; set; }
         public int TableCount { get; set; }
 
+        // 报表示例图
+        public byte[] PreviewImageBytes { get; set; }
+
         public string Category => DocumentType switch
         {
             swDocumentTypes_e.swDocPART => "零件",
