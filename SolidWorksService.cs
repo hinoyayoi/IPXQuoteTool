@@ -532,27 +532,48 @@ namespace IPXQuoteTool
             {
                 if (docType == swDocumentTypes_e.swDocDRAWING)
                 {
-                    model.Extension?.ViewZoomToSheet();
+                    ActivateFirstDrawingSheet(model);
+                    model.ViewZoomtofit2();
+                    return;
+                }
+
+                model.ShowNamedView2("*Isometric", (int)swStandardViews_e.swIsometricView);
+                model.ViewZoomtofit2();
+
+                if (model.IActiveView is ModelView activeView)
+                {
+                    activeView.DisplayMode = (int)swDisplayMode_e.swSHADED_EDGES;
+                    activeView.DisplayZebraStripes = false;
                 }
                 else
                 {
-                    model.ShowNamedView2("*Isometric", (int)swStandardViews_e.swIsometricView);
-                    model.ViewZoomtofit2();
-
-                    if (model.IActiveView is ModelView activeView)
-                    {
-                        activeView.DisplayMode = (int)swDisplayMode_e.swSHADED_EDGES;
-                        activeView.DisplayZebraStripes = false;
-                    }
-                    else
-                    {
-                        model.ViewDisplayShaded();
-                    }
+                    model.ViewDisplayShaded();
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"准备实时视图截图失败: {ex.Message}");
+            }
+        }
+
+        private static void ActivateFirstDrawingSheet(ModelDoc2 model)
+        {
+            try
+            {
+                if (model is not DrawingDoc drawingDoc)
+                {
+                    return;
+                }
+
+                object sheetNamesObj = drawingDoc.GetSheetNames();
+                if (sheetNamesObj is Array sheetNames && sheetNames.Length > 0 && sheetNames.GetValue(0) is string firstSheetName)
+                {
+                    drawingDoc.ActivateSheet(firstSheetName);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"激活工程图首个图纸页失败: {ex.Message}");
             }
         }
 

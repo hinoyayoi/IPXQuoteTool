@@ -8,118 +8,331 @@ namespace IPXQuoteTool.Analysis.Assemblies
 {
     public class AssemblyMetricExtractor : IDocumentMetricExtractor
     {
+        private static readonly HashSet<string> AssemblyFeatureTypeWhitelist = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "LocalChainPattern",
+            "LocalCirPattern",
+            "LocalCurvePattern",
+            "LocalLPattern",
+            "LocalSketchPattern",
+            "DerivedCirPattern",
+            "DerivedLPattern",
+            "DerivedHolePattern",
+            "FtrFolder",
+            "Chamfer",
+            "HoleSeries",
+            "Fillet",
+            "BossThin",
+            "HoleWzd",
+            "SweepCut",
+            "MirrorPattern",
+            "MirrorSolid",
+            "MirrorStock",
+            "MirrorCompFeat"
+        };
+
         public swDocumentTypes_e SupportedDocumentType => swDocumentTypes_e.swDocASSEMBLY;
 
         public void Extract(DocumentAnalysisContext context, DocumentInfo info)
         {
-            var components = TraverseAssembly(context.Model);
-            info.ComponentCount = components.Sum(c => c.Quantity);
+            info.ComponentCount = CountTopLevelComponentFeatures(context.Model);
             info.MateCount = CountMates(context.Model);
             info.AssemblyFeatureCount = CountAssemblyFeatures(context.Model);
             info.ExpressionCount = SolidWorksEquationCounter.CountEquations(context.Model);
         }
 
-        private static List<ComponentInfo> TraverseAssembly(ModelDoc2 model)
+        private static int CountTopLevelComponentFeatures(ModelDoc2 model)
         {
-            var components = new List<ComponentInfo>();
+            int count = 0;
 
             try
             {
-                Configuration conf = (Configuration)model.GetActiveConfiguration();
-                Component2 rootComp = (Component2)conf.GetRootComponent();
-                TraverseComponentRecursive(rootComp, components, 0);
+                Feature feature = (Feature)model.FirstFeature();
+                while (feature != null)
+                {
+                    Component2 component = TryGetComponentFromFeature(feature);
+                    if (component != null && !IsIgnoredComponentFeature(feature, component))
+                    {
+                        count++;
+                    }
+
+                    feature = (Feature)feature.GetNextFeature();
+                }
             }
             catch
             {
             }
 
-            return components;
+            return count;
         }
 
-        private static void TraverseComponentRecursive(Component2 comp, List<ComponentInfo> list, int level)
+        private static Component2 TryGetComponentFromFeature(Feature feature)
         {
-            if (comp == null)
+            if (feature == null)
             {
-                return;
+                return null;
             }
-
-            int quantity = 1;
 
             try
             {
-                dynamic dynComp = comp;
+                object specificFeature = feature.GetSpecificFeature2() ?? feature.GetSpecificFeature();
+                return specificFeature as Component2;
+            }
+            catch
+            {
                 try
                 {
-                    quantity = (int)dynComp.GetCount();
+                    return feature.GetSpecificFeature() as Component2;
                 }
                 catch
                 {
-                    try
-                    {
-                        quantity = (int)dynComp.GetCount2(false);
-                    }
-                    catch
-                    {
-                    }
+                    return null;
+                }
+            }
+        }
+
+        private static bool IsIgnoredComponentFeature(Feature feature, Component2 component)
+        {
+            try
+            {
+                if (feature.IsSuppressed() || component.IsSuppressed())
+                {
+                    return true;
                 }
             }
             catch
             {
             }
-
-            list.Add(new ComponentInfo
-            {
-                Name = comp.Name2,
-                Level = level,
-                Configuration = comp.ReferencedConfiguration,
-                Quantity = quantity
-            });
 
             try
             {
-                object childrenObj = comp.GetChildren();
-                if (childrenObj is Array children)
+                if (component.IsPatternInstance())
                 {
-                    foreach (var child in children)
-                    {
-                        TraverseComponentRecursive((Component2)child, list, level + 1);
-                    }
+                    return true;
                 }
             }
             catch
             {
             }
+
+            return false;
         }
 
         private static int CountMates(ModelDoc2 model)
         {
             try
             {
+                int mateGroupCount = CountMatesFromMateGroup(model);
+                if (mateGroupCount >= 0)
+                {
+                    return mateGroupCount;
+                }
+
                 dynamic assemblyDoc = model;
+                int mateListCount = CountMatesFromList(assemblyDoc);
+                if (mateListCount >= 0)
+                {
+                    return mateListCount;
+                }
+
                 try
                 {
                     return (int)assemblyDoc.GetMatesCount();
                 }
                 catch
                 {
-                    try
-                    {
-                        object mates = assemblyDoc.GetMates(true);
-                        if (mates is Array matesArray)
-                        {
-                            return matesArray.Length;
-                        }
-                    }
-                    catch
-                    {
-                    }
-
                     return 0;
                 }
             }
             catch
             {
                 return 0;
+            }
+        }
+
+        private static int CountMatesFromMateGroup(ModelDoc2 model)
+        {
+            try
+            {
+                Feature feature = (Feature)model.FirstFeature();
+                while (feature != null)
+                {
+                    if (IsMateGroupFeature(feature))
+                    {
+                        return CountMateSubFeatures(feature);
+                    }
+
+                    feature = (Feature)feature.GetNextFeature();
+                }
+            }
+            catch
+            {
+            }
+
+            return -1;
+        }
+
+        private static bool IsMateGroupFeature(Feature feature)
+        {
+            string typeName = GetFeatureTypeName(feature);
+            if (!string.IsNullOrWhiteSpace(typeName) &&
+                typeName.IndexOf("MateGroup", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            try
+            {
+                string name = feature.Name;
+                return !string.IsNullOrWhiteSpace(name) &&
+                       (name.Equals("Mates", StringComparison.OrdinalIgnoreCase) ||
+                        name.Equals("配合", StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static int CountMateSubFeatures(Feature mateGroupFeature)
+        {
+            int count = 0;
+
+            try
+            {
+                Feature subFeature = (Feature)mateGroupFeature.GetFirstSubFeature();
+                while (subFeature != null)
+                {
+                    count += CountMateFeatureRecursive(subFeature);
+                    subFeature = (Feature)subFeature.GetNextSubFeature();
+                }
+            }
+            catch
+            {
+            }
+
+            return count;
+        }
+
+        private static int CountMateFeatureRecursive(Feature feature)
+        {
+            int count = IsMateFeature(feature) ? 1 : 0;
+
+            try
+            {
+                Feature subFeature = (Feature)feature.GetFirstSubFeature();
+                while (subFeature != null)
+                {
+                    count += CountMateFeatureRecursive(subFeature);
+                    subFeature = (Feature)subFeature.GetNextSubFeature();
+                }
+            }
+            catch
+            {
+            }
+
+            return count;
+        }
+
+        private static bool IsMateFeature(Feature feature)
+        {
+            if (feature == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (feature.IsSuppressed())
+                {
+                    return false;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                object specificFeature = feature.GetSpecificFeature2() ?? feature.GetSpecificFeature();
+                if (specificFeature is Mate2)
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            string typeName = GetFeatureTypeName(feature);
+            return !string.IsNullOrWhiteSpace(typeName) &&
+                   typeName.IndexOf("Mate", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                   typeName.IndexOf("MateGroup", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        private static int CountMatesFromList(dynamic assemblyDoc)
+        {
+            foreach (bool includeHidden in new[] { true, false })
+            {
+                try
+                {
+                    int count = CountVariantItems(assemblyDoc.GetMates(includeHidden));
+                    if (count >= 0)
+                    {
+                        return count;
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            try
+            {
+                int count = CountVariantItems(assemblyDoc.GetMates());
+                if (count >= 0)
+                {
+                    return count;
+                }
+            }
+            catch
+            {
+            }
+
+            return -1;
+        }
+
+        private static int CountVariantItems(object value)
+        {
+            if (value is Array array)
+            {
+                return array.Length;
+            }
+
+            return value == null ? -1 : -1;
+        }
+
+        private static string GetFeatureTypeName(Feature feature)
+        {
+            if (feature == null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return feature.GetTypeName2();
+            }
+            catch
+            {
+                try
+                {
+                    return feature.GetTypeName();
+                }
+                catch
+                {
+                    return string.Empty;
+                }
             }
         }
 
@@ -132,10 +345,8 @@ namespace IPXQuoteTool.Analysis.Assemblies
                 Feature feat = (Feature)model.FirstFeature();
                 while (feat != null)
                 {
-                    string typeName = feat.GetTypeName();
-                    if (typeName.Contains("Assembly") ||
-                        typeName.Contains("Pattern") ||
-                        typeName.Contains("Mate"))
+                    string typeName = GetFeatureTypeName(feat);
+                    if (AssemblyFeatureTypeWhitelist.Contains(typeName))
                     {
                         count++;
                     }
