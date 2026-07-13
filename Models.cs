@@ -32,6 +32,10 @@ namespace IPXQuoteTool
         // 报表示例图
         public byte[] PreviewImageBytes { get; set; }
 
+        // 处理失败时仍保留报表占位行
+        public bool IsProcessingFailed { get; set; }
+        public string ProcessingError { get; set; }
+
         public string Category => DocumentType switch
         {
             swDocumentTypes_e.swDocPART => "零件",

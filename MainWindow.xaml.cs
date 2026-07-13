@@ -458,7 +458,7 @@ namespace IPXQuoteTool
                 string file = files[i];
                 DocumentInfo info = useOfflineMode
                     ? offlineService.ProcessDocument(file)
-                    : _swService.ProcessDocument(file);
+                    : ProcessDocumentWithSolidWorksRecovery(file, softwarePath);
 
                 if (info != null)
                 {
@@ -489,10 +489,21 @@ namespace IPXQuoteTool
                 else
                 {
                     LogError($"处理失败: {Path.GetFileName(file)}");
+                    string failureReason = null;
                     if (useOfflineMode && !string.IsNullOrWhiteSpace(offlineService.LastError))
                     {
-                        LogError(offlineService.LastError);
+                        failureReason = offlineService.LastError;
+                        LogError(failureReason);
                     }
+                    else if (!useOfflineMode && !string.IsNullOrWhiteSpace(_swService.LastError))
+                    {
+                        failureReason = _swService.LastError;
+                        LogError(failureReason);
+                    }
+
+                    DocumentInfo failedInfo = CreateFailedDocumentPlaceholder(file, failureReason);
+                    results.Add(failedInfo);
+                    Log($"已在报表中保留失败图纸占位行: {failedInfo.FileName}");
                 }
 
                 int processedCount = i + 1;
@@ -508,6 +519,68 @@ namespace IPXQuoteTool
             byte[] reportContent = _swService.GenerateReport(results, pricingSettings);
             bool saveSuccess = _swService.SaveReport(reportPath, reportContent);
             return new ProcessingResult(results.Count, saveSuccess, false);
+        }
+
+        private static DocumentInfo CreateFailedDocumentPlaceholder(string filePath, string failureReason)
+        {
+            return new DocumentInfo
+            {
+                FileName = Path.GetFileName(filePath),
+                FilePath = filePath,
+                DocumentType = GetDocumentTypeFromPath(filePath),
+                IsProcessingFailed = true,
+                ProcessingError = failureReason ?? "处理失败，已跳过。"
+            };
+        }
+
+        private static SolidWorks.Interop.swconst.swDocumentTypes_e GetDocumentTypeFromPath(string filePath)
+        {
+            return Path.GetExtension(filePath).ToLowerInvariant() switch
+            {
+                ".sldprt" => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART,
+                ".sldasm" => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocASSEMBLY,
+                ".slddrw" => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocDRAWING,
+                _ => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocNONE
+            };
+        }
+
+        private DocumentInfo ProcessDocumentWithSolidWorksRecovery(string file, string softwarePath)
+        {
+            DocumentInfo info = _swService.ProcessDocument(file);
+            if (info != null)
+            {
+                return info;
+            }
+
+            if (_swService.IsConnectionAlive())
+            {
+                return null;
+            }
+
+            LogError($"检测到 SolidWorks 连接已断开，准备重启并重试当前文件: {Path.GetFileName(file)}");
+            _swService.ResetConnection();
+
+            if (!_swService.ConnectOrStart(softwarePath))
+            {
+                string error = string.IsNullOrWhiteSpace(_swService.LastError)
+                    ? "SolidWorks 重启失败。"
+                    : _swService.LastError;
+                LogError(error);
+                return null;
+            }
+
+            LogSuccess("SolidWorks 已重新连接，正在重试当前文件...");
+            info = _swService.ProcessDocument(file);
+            if (info == null)
+            {
+                LogError($"重试后仍处理失败: {Path.GetFileName(file)}");
+                if (!string.IsNullOrWhiteSpace(_swService.LastError))
+                {
+                    LogError(_swService.LastError);
+                }
+            }
+
+            return info;
         }
 
         private class DocumentProgressUpdate

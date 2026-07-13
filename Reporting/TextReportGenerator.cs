@@ -180,14 +180,14 @@ namespace IPXQuoteTool.Reporting
                     if (i == 0)
                     {
                         AppendIntegerCell(sb, $"A{rowIndex}", reportRow.Index, 4);
-                        AppendInlineCell(sb, $"B{rowIndex}", reportRow.Document.FileName, 3);
+                        AppendInlineCell(sb, $"B{rowIndex}", GetDisplayFileName(reportRow.Document), 3);
                         AppendInlineCell(sb, $"C{rowIndex}", string.Empty, 3);
                         AppendInlineCell(sb, $"D{rowIndex}", reportRow.Document.Category, 3);
                         AppendInlineCell(sb, $"E{rowIndex}", objectRow.Name, 3);
                         AppendIntegerCell(sb, $"F{rowIndex}", objectRow.Count, 4);
                         AppendFormulaNumberCell(sb, $"G{rowIndex}", GetDiscountFormula(reportRow.Document.DocumentType), reportRow.Price.Discount, 3);
                         AppendFormulaNumberCell(sb, $"H{rowIndex}", $"{reportRow.Price.ComplexityScore.ToString("0.00", CultureInfo.InvariantCulture)}*G{rowIndex}", reportRow.Price.FinalScore, 3);
-                        AppendInlineCell(sb, $"I{rowIndex}", reportRow.Document.FilePath ?? string.Empty, 3);
+                        AppendInlineCell(sb, $"I{rowIndex}", GetDisplayFilePath(reportRow.Document), 3);
                         AppendDiscountParameterCells(sb, rowIndex, pricingSettings);
                     }
                     else
@@ -290,6 +290,23 @@ namespace IPXQuoteTool.Reporting
         private static void AppendInlineCell(StringBuilder sb, string reference, string value, int styleIndex)
         {
             sb.AppendLine($"      <c r=\"{reference}\" t=\"inlineStr\" s=\"{styleIndex}\"><is><t>{SecurityElement.Escape(value ?? string.Empty)}</t></is></c>");
+        }
+
+        private static string GetDisplayFileName(DocumentInfo document)
+        {
+            return document.IsProcessingFailed
+                ? $"{document.FileName}\n处理失败，请补充"
+                : document.FileName;
+        }
+
+        private static string GetDisplayFilePath(DocumentInfo document)
+        {
+            if (!document.IsProcessingFailed)
+            {
+                return document.FilePath ?? string.Empty;
+            }
+
+            return $"{document.FilePath ?? string.Empty}\n失败原因: {document.ProcessingError}";
         }
 
         private static void AppendNumberCell(StringBuilder sb, string reference, double value, int styleIndex)

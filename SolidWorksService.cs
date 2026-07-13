@@ -30,6 +30,29 @@ namespace IPXQuoteTool
 
         public string LastError { get; private set; }
 
+        public bool IsConnectionAlive()
+        {
+            try
+            {
+                if (_swApp == null)
+                {
+                    return false;
+                }
+
+                _ = _swApp.RevisionNumber();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public void ResetConnection()
+        {
+            _swApp = null;
+        }
+
         public bool ConnectOrStart(string swInstallPath, int timeoutSeconds = 60)
         {
             LastError = null;
@@ -415,6 +438,7 @@ namespace IPXQuoteTool
                 if (!File.Exists(filePath))
                 {
                     Debug.WriteLine($"文件不存在: {filePath}");
+                    LastError = $"文件不存在: {filePath}";
                     return null;
                 }
 
@@ -433,6 +457,7 @@ namespace IPXQuoteTool
                 if (docType == swDocumentTypes_e.swDocNONE)
                 {
                     Debug.WriteLine($"不支持的文件类型: {filePath}");
+                    LastError = $"不支持的文件类型: {filePath}";
                     return null;
                 }
 
@@ -451,6 +476,7 @@ namespace IPXQuoteTool
                 if (model == null)
                 {
                     Debug.WriteLine($"打开文件失败: {filePath} (错误码: {errors}, 警告码: {warnings})");
+                    LastError = $"打开文件失败: {Path.GetFileName(filePath)} (错误码: {errors}, 警告码: {warnings})";
                     return null;
                 }
 
@@ -471,6 +497,7 @@ namespace IPXQuoteTool
             {
                 Debug.WriteLine($"处理文件出错 {filePath}: {ex.Message}");
                 Debug.WriteLine($"异常详情: {ex.StackTrace}");
+                LastError = $"处理文件出错 {Path.GetFileName(filePath)}: {ex.Message}";
                 return null;
             }
         }
