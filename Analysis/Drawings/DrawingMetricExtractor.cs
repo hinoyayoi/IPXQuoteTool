@@ -45,11 +45,16 @@ namespace IPXQuoteTool.Analysis.Drawings
 
                     foreach (ViewInfo viewInfo in views)
                     {
-                        int annotationCount = CountAnnotationsInView(viewInfo);
+                        int annotationCount = CountAnnotationsInView(model, viewInfo);
                         dimensionCount += annotationCount;
                         noteCount += viewInfo.IsSheetView ? 0 : CountNotesInView(viewInfo.View);
 
-                        tableCount += CountTablesInView(viewInfo.View);
+                        if (!viewInfo.IsSheetView)
+                        {
+                            AnalysisTraceLogger.Write(model, "视图", GetViewName(viewInfo.View), sheetName);
+                        }
+
+                        tableCount += CountTablesInView(model, viewInfo.View);
                     }
 
                     if (drawings.Count == 0)
@@ -84,10 +89,15 @@ namespace IPXQuoteTool.Analysis.Drawings
                     return 0;
                 }
 
-                int count = extension.GetOLEObjectCount(0);
-                if (count >= 0)
+                object oleObjectsObj = extension.GetOLEObjects(0);
+                if (oleObjectsObj is Array oleObjects)
                 {
-                    return count;
+                    for (int i = 0; i < oleObjects.Length; i++)
+                    {
+                        AnalysisTraceLogger.Write(model, "标注:OLE对象", $"OLE对象 {i + 1}");
+                    }
+
+                    return oleObjects.Length;
                 }
             }
             catch
@@ -96,11 +106,13 @@ namespace IPXQuoteTool.Analysis.Drawings
 
             try
             {
-                object oleObjectsObj = model.Extension?.GetOLEObjects(0);
-                if (oleObjectsObj is Array oleObjects)
+                int count = model.Extension?.GetOLEObjectCount(0) ?? 0;
+                for (int i = 0; i < count; i++)
                 {
-                    return oleObjects.Length;
+                    AnalysisTraceLogger.Write(model, "标注:OLE对象", $"OLE对象 {i + 1}");
                 }
+
+                return count;
             }
             catch
             {
@@ -144,28 +156,28 @@ namespace IPXQuoteTool.Analysis.Drawings
             }
         }
 
-        private static int CountAnnotationsInView(ViewInfo viewInfo)
+        private static int CountAnnotationsInView(ModelDoc2 model, ViewInfo viewInfo)
         {
             View view = viewInfo.View;
             int count = 0;
 
-            count += SafeCount(() => view.GetWeldBeadCount());
+            count += CountAndLogObjects(model, view, "标注:焊缝bead", () => view.GetWeldBeads(), () => view.GetWeldBeadCount());
 
             if (!viewInfo.IsSheetView)
             {
-                count += CountNotesInView(view);
+                count += CountAndLogObjects(model, view, "标注:普通注释", () => view.GetNotes(), () => view.GetNoteCount());
             }
 
-            count += SafeCount(() => view.GetDatumTagCount());
-            count += SafeCount(() => view.GetDatumTargetSymCount());
-            count += SafeCount(() => view.GetWeldSymbolCount());
-            count += SafeCount(() => view.GetGTolCount());
-            count += SafeCount(() => view.GetCenterLineCount());
-            count += CountCenterMarksInView(view);
-            count += SafeCount(() => view.GetSFSymbolCount());
-            count += SafeCount(() => view.GetRevisionCloudCount());
-            count += SafeCount(() => view.GetDowelSymbolCount());
-            count += CountDimensionsInView(view);
+            count += CountAndLogObjects(model, view, "标注:基准标签", () => view.GetDatumTags(), () => view.GetDatumTagCount());
+            count += CountAndLogObjects(model, view, "标注:基准目标", () => view.GetDatumTargetSyms(), () => view.GetDatumTargetSymCount());
+            count += CountAndLogObjects(model, view, "标注:焊接符号", () => view.GetWeldSymbols(), () => view.GetWeldSymbolCount());
+            count += CountAndLogObjects(model, view, "标注:几何公差", () => view.GetGTols(), () => view.GetGTolCount());
+            count += CountAndLogObjects(model, view, "标注:中心线", () => view.GetCenterLines(), () => view.GetCenterLineCount());
+            count += CountAndLogObjects(model, view, "标注:中心标记", () => view.GetCenterMarks(), () => CountCenterMarksInView(view));
+            count += CountAndLogObjects(model, view, "标注:表面粗糙度", () => view.GetSFSymbols(), () => view.GetSFSymbolCount());
+            count += CountAndLogObjects(model, view, "标注:修订云线", () => view.GetRevisionClouds(), () => view.GetRevisionCloudCount());
+            count += CountAndLogObjects(model, view, "标注:销钉符号", () => view.GetDowelSymbols(), () => view.GetDowelSymbolCount());
+            count += CountAndLogObjects(model, view, "标注:可见尺寸", () => view.GetDisplayDimensions(), () => CountDimensionsInView(view));
 
             return count;
         }
@@ -233,14 +245,19 @@ namespace IPXQuoteTool.Analysis.Drawings
             }
         }
 
-        private static int CountTablesInView(View view)
+        private static int CountTablesInView(ModelDoc2 model, View view)
         {
             try
             {
-                int tableAnnotationCount = view.GetTableAnnotationCount();
-                if (tableAnnotationCount >= 0)
+                object tablesObj = view.GetTableAnnotations();
+                if (tablesObj is Array tables)
                 {
-                    return tableAnnotationCount;
+                    for (int i = 0; i < tables.Length; i++)
+                    {
+                        AnalysisTraceLogger.Write(model, "表格", GetObjectName(tables.GetValue(i), $"Table {i + 1}"), GetViewName(view));
+                    }
+
+                    return tables.Length;
                 }
             }
             catch
@@ -249,10 +266,15 @@ namespace IPXQuoteTool.Analysis.Drawings
 
             try
             {
-                object tablesObj = view.GetTableAnnotations();
-                if (tablesObj is Array tables)
+                int tableAnnotationCount = view.GetTableAnnotationCount();
+                if (tableAnnotationCount >= 0)
                 {
-                    return tables.Length;
+                    for (int i = 0; i < tableAnnotationCount; i++)
+                    {
+                        AnalysisTraceLogger.Write(model, "表格", $"Table {i + 1}", GetViewName(view));
+                    }
+
+                    return tableAnnotationCount;
                 }
             }
             catch
@@ -267,6 +289,7 @@ namespace IPXQuoteTool.Analysis.Drawings
                 while (table != null)
                 {
                     count++;
+                    AnalysisTraceLogger.Write(model, "表格", GetObjectName(table, $"Table {count}"), GetViewName(view));
                     table = table.GetNext();
                 }
             }
@@ -275,6 +298,58 @@ namespace IPXQuoteTool.Analysis.Drawings
             }
 
             return count;
+        }
+
+        private static int CountAndLogObjects(ModelDoc2 model, View view, string objectType, Func<object> objectsProvider, Func<int> countProvider)
+        {
+            try
+            {
+                object objectsObj = objectsProvider();
+                if (objectsObj is Array objects)
+                {
+                    for (int i = 0; i < objects.Length; i++)
+                    {
+                        AnalysisTraceLogger.Write(model, objectType, GetObjectName(objects.GetValue(i), $"{objectType} {i + 1}"), GetViewName(view));
+                    }
+
+                    return objects.Length;
+                }
+            }
+            catch
+            {
+            }
+
+            int count = SafeCount(countProvider);
+            for (int i = 0; i < count; i++)
+            {
+                AnalysisTraceLogger.Write(model, objectType, $"{objectType} {i + 1}", GetViewName(view));
+            }
+
+            return count;
+        }
+
+        private static string GetObjectName(object value, string fallback)
+        {
+            try
+            {
+                dynamic dynValue = value;
+                object annotationObj = dynValue.GetAnnotation();
+                string annotationName = AnalysisTraceLogger.GetObjectName(annotationObj, null);
+                if (!string.IsNullOrWhiteSpace(annotationName))
+                {
+                    return annotationName;
+                }
+            }
+            catch
+            {
+            }
+
+            return AnalysisTraceLogger.GetObjectName(value, fallback);
+        }
+
+        private static string GetViewName(View view)
+        {
+            return AnalysisTraceLogger.GetObjectName(view, "View");
         }
 
         private class ViewInfo

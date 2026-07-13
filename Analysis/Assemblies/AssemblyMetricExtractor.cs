@@ -1,5 +1,6 @@
 ﻿using SolidWorks.Interop.sldworks;
 using SolidWorks.Interop.swconst;
+using IPXQuoteTool.Analysis.Parts;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -43,7 +44,24 @@ namespace IPXQuoteTool.Analysis.Assemblies
 
         private static int CountTopLevelComponentFeatures(ModelDoc2 model)
         {
-            int count = 0;
+            var components = GetTopLevelComponentsFromFeatures(model);
+
+            for (int i = 0; i < components.Count; i++)
+            {
+                Component2 component = components[i];
+                AnalysisTraceLogger.Write(
+                    model,
+                    "组件数",
+                    AnalysisTraceLogger.GetObjectName(component, $"Component {i + 1}"),
+                    IsVirtualComponent(component) ? "虚拟组件" : SafeComponentPath(component));
+            }
+
+            return components.Count;
+        }
+
+        private static List<Component2> GetTopLevelComponentsFromFeatures(ModelDoc2 model)
+        {
+            var components = new List<Component2>();
 
             try
             {
@@ -53,7 +71,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
                     Component2 component = TryGetComponentFromFeature(feature);
                     if (component != null && !IsIgnoredComponentFeature(feature, component))
                     {
-                        count++;
+                        components.Add(component);
                     }
 
                     feature = (Feature)feature.GetNextFeature();
@@ -63,7 +81,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             {
             }
 
-            return count;
+            return components;
         }
 
         private static Component2 TryGetComponentFromFeature(Feature feature)
@@ -118,6 +136,30 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return false;
         }
 
+        private static bool IsVirtualComponent(Component2 component)
+        {
+            try
+            {
+                return component?.IsVirtual == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string SafeComponentPath(Component2 component)
+        {
+            try
+            {
+                return component?.GetPathName() ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
         private static int CountMates(ModelDoc2 model)
         {
             try
@@ -159,7 +201,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
                 {
                     if (IsMateGroupFeature(feature))
                     {
-                        return CountMateSubFeatures(feature);
+                        return CountMateSubFeatures(model, feature);
                     }
 
                     feature = (Feature)feature.GetNextFeature();
@@ -194,7 +236,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             }
         }
 
-        private static int CountMateSubFeatures(Feature mateGroupFeature)
+        private static int CountMateSubFeatures(ModelDoc2 model, Feature mateGroupFeature)
         {
             int count = 0;
 
@@ -203,7 +245,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
                 Feature subFeature = (Feature)mateGroupFeature.GetFirstSubFeature();
                 while (subFeature != null)
                 {
-                    count += CountMateFeatureRecursive(subFeature);
+                    count += CountMateFeatureRecursive(model, subFeature);
                     subFeature = (Feature)subFeature.GetNextSubFeature();
                 }
             }
@@ -214,16 +256,25 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return count;
         }
 
-        private static int CountMateFeatureRecursive(Feature feature)
+        private static int CountMateFeatureRecursive(ModelDoc2 model, Feature feature)
         {
-            int count = IsMateFeature(feature) ? 1 : 0;
+            int count = 0;
+            if (IsMateFeature(feature))
+            {
+                count++;
+                AnalysisTraceLogger.Write(
+                    model,
+                    "装配约束",
+                    AnalysisTraceLogger.GetObjectName(feature, $"Mate {count}"),
+                    GetFeatureTypeName(feature));
+            }
 
             try
             {
                 Feature subFeature = (Feature)feature.GetFirstSubFeature();
                 while (subFeature != null)
                 {
-                    count += CountMateFeatureRecursive(subFeature);
+                    count += CountMateFeatureRecursive(model, subFeature);
                     subFeature = (Feature)subFeature.GetNextSubFeature();
                 }
             }
@@ -338,7 +389,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
 
         private static int CountAssemblyFeatures(ModelDoc2 model)
         {
-            int count = 0;
+            int count = CountVirtualComponentPartFeatures(model);
 
             try
             {
@@ -349,6 +400,11 @@ namespace IPXQuoteTool.Analysis.Assemblies
                     if (AssemblyFeatureTypeWhitelist.Contains(typeName))
                     {
                         count++;
+                        AnalysisTraceLogger.Write(
+                            model,
+                            "装配特征",
+                            AnalysisTraceLogger.GetObjectName(feat, $"AssemblyFeature {count}"),
+                            typeName);
                     }
 
                     feat = (Feature)feat.GetNextFeature();
@@ -359,6 +415,95 @@ namespace IPXQuoteTool.Analysis.Assemblies
             }
 
             return count;
+        }
+
+        private static int CountVirtualComponentPartFeatures(ModelDoc2 assemblyModel)
+        {
+            int count = 0;
+
+            foreach (Component2 component in GetTopLevelComponentsFromFeatures(assemblyModel))
+            {
+                if (!IsVirtualComponent(component))
+                {
+                    continue;
+                }
+
+                try
+                {
+                        count += CountVirtualPartFeatures(assemblyModel, component);
+                }
+                catch
+                {
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountVirtualPartFeatures(ModelDoc2 assemblyModel, Component2 component)
+        {
+            ModelDoc2 componentModel = GetComponentModel(component);
+            if (componentModel == null || (swDocumentTypes_e)componentModel.GetType() != swDocumentTypes_e.swDocPART)
+            {
+                return 0;
+            }
+
+            return PartFeatureCounter.CountFeatures(
+                componentModel,
+                swDocumentTypes_e.swDocASSEMBLY,
+                SafeModelPath(assemblyModel),
+                $"虚拟组件零件特征:{AnalysisTraceLogger.GetObjectName(component, "VirtualComponent")}");
+        }
+
+        private static ModelDoc2 GetComponentModel(Component2 component)
+        {
+            if (component == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                if (component.GetModelDoc2() is ModelDoc2 model)
+                {
+                    return model;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (component.IGetModelDoc() is ModelDoc2 model)
+                {
+                    return model;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                return component.GetModelDoc() as ModelDoc2;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string SafeModelPath(ModelDoc2 model)
+        {
+            try
+            {
+                return model?.GetPathName() ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
         }
     }
 }
