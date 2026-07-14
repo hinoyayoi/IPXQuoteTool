@@ -6,9 +6,10 @@
 
 $ErrorActionPreference = "Stop"
 
-$projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$projectRoot = Split-Path -Parent $scriptRoot
 $projectFile = Join-Path $projectRoot "IPXQuoteTool.csproj"
-$publishRoot = Join-Path $projectRoot "publish"
+$publishRoot = Join-Path $projectRoot "artifacts\publish"
 $portableDir = Join-Path $publishRoot "IPXQuoteTool_Portable"
 $zipPath = Join-Path $publishRoot "IPXQuoteTool_Portable.zip"
 $coefficientFileName = "对象系数.xlsx"
@@ -162,7 +163,12 @@ $runtimeDownloadUrl
 "@
 Set-Content -LiteralPath $readmePath -Value $readme -Encoding UTF8
 
-Compress-Archive -LiteralPath $portableDir -DestinationPath $zipPath -Force
+if (Test-Path -LiteralPath $zipPath) {
+    Remove-Item -LiteralPath $zipPath -Force
+}
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($portableDir, $zipPath, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
 Write-Host ""
 Write-Host "Portable folder: $portableDir"

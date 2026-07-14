@@ -42,6 +42,11 @@ namespace IPXQuoteTool.Pricing
             {
                 WriteDefaultFile(filePath);
             }
+            else if (!FileContainsPricingSections(filePath))
+            {
+                ObjectCoefficientSettings existingSettings = LoadFromFile(filePath);
+                WriteDefaultFile(filePath, existingSettings);
+            }
 
             return filePath;
         }
@@ -49,6 +54,11 @@ namespace IPXQuoteTool.Pricing
         public static ObjectCoefficientSettings Load()
         {
             string filePath = EnsureDefaultFile();
+            return LoadFromFile(filePath);
+        }
+
+        private static ObjectCoefficientSettings LoadFromFile(string filePath)
+        {
             var settings = ObjectCoefficientSettings.CreateDefault();
 
             try
@@ -60,6 +70,8 @@ namespace IPXQuoteTool.Pricing
                         settings.SetValue(row.Category, row.ObjectName, coefficient);
                     }
                 }
+
+                LoadPricingSections(filePath, settings);
             }
             catch
             {
@@ -166,7 +178,89 @@ namespace IPXQuoteTool.Pricing
             return cells.TryGetValue(column, out string value) ? value.Trim() : string.Empty;
         }
 
+        private static bool FileContainsPricingSections(string filePath)
+        {
+            try
+            {
+                Dictionary<string, string> cells = ReadCellMap(filePath);
+                return cells.Values.Any(value => value == "单价") &&
+                       cells.Values.Any(value => value == "等效特征数范围");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static void LoadPricingSections(string filePath, ObjectCoefficientSettings settings)
+        {
+            Dictionary<string, string> cells = ReadCellMap(filePath);
+
+            if (TryParseCoefficient(GetCell(cells, "B14"), out double unitPrice) && unitPrice > 0)
+            {
+                settings.UnitPrice = unitPrice;
+            }
+
+            if (TryParseCoefficient(GetCell(cells, "C17"), out double range0To15))
+            {
+                settings.ComplexityPricing.Range0To15Coefficient = range0To15;
+            }
+
+            if (TryParseCoefficient(GetCell(cells, "C18"), out double range15To40))
+            {
+                settings.ComplexityPricing.Range15To40Coefficient = range15To40;
+            }
+
+            if (TryParseCoefficient(GetCell(cells, "C19"), out double range40To80))
+            {
+                settings.ComplexityPricing.Range40To80Coefficient = range40To80;
+            }
+
+            if (TryParseCoefficient(GetCell(cells, "C20"), out double rangeOver80))
+            {
+                settings.ComplexityPricing.RangeOver80Coefficient = rangeOver80;
+            }
+        }
+
+        private static Dictionary<string, string> ReadCellMap(string filePath)
+        {
+            var cells = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            using ZipArchive archive = ZipFile.OpenRead(filePath);
+            List<string> sharedStrings = ReadSharedStrings(archive);
+            ZipArchiveEntry sheetEntry = archive.GetEntry("xl/worksheets/sheet1.xml");
+            if (sheetEntry == null)
+            {
+                return cells;
+            }
+
+            XNamespace ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+            using Stream sheetStream = sheetEntry.Open();
+            XDocument sheetDocument = XDocument.Load(sheetStream);
+
+            foreach (XElement cell in sheetDocument.Descendants(ns + "c"))
+            {
+                string reference = (string)cell.Attribute("r");
+                if (!string.IsNullOrWhiteSpace(reference))
+                {
+                    cells[reference] = GetCellValue(cell, sharedStrings, ns);
+                }
+            }
+
+            return cells;
+        }
+
+        private static string GetCell(Dictionary<string, string> cells, string reference)
+        {
+            return cells.TryGetValue(reference, out string value) ? value.Trim() : string.Empty;
+        }
+
         private static void WriteDefaultFile(string filePath)
+        {
+            WriteDefaultFile(filePath, ObjectCoefficientSettings.CreateDefault());
+        }
+
+        private static void WriteDefaultFile(string filePath, ObjectCoefficientSettings settings)
         {
             string directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrWhiteSpace(directory) && !Directory.Exists(directory))
@@ -185,7 +279,7 @@ namespace IPXQuoteTool.Pricing
             AddEntry(archive, "xl/workbook.xml", GetWorkbookXml());
             AddEntry(archive, "xl/_rels/workbook.xml.rels", GetWorkbookRelationshipsXml());
             AddEntry(archive, "xl/styles.xml", GetStylesXml());
-            AddEntry(archive, "xl/worksheets/sheet1.xml", GetWorksheetXml());
+            AddEntry(archive, "xl/worksheets/sheet1.xml", GetWorksheetXml(settings));
         }
 
         private static void AddEntry(ZipArchive archive, string name, string content)
@@ -265,12 +359,12 @@ namespace IPXQuoteTool.Pricing
 """;
         }
 
-        private static string GetWorksheetXml()
+        private static string GetWorksheetXml(ObjectCoefficientSettings settings)
         {
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.AppendLine("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            sb.AppendLine("  <dimension ref=\"A1:D12\"/>");
+            sb.AppendLine("  <dimension ref=\"A1:D20\"/>");
             sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             sb.AppendLine("  <cols><col min=\"1\" max=\"1\" width=\"14\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"18\" customWidth=\"1\"/><col min=\"3\" max=\"3\" width=\"42\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"72\" customWidth=\"1\"/></cols>");
             sb.AppendLine("  <sheetData>");
@@ -288,14 +382,39 @@ namespace IPXQuoteTool.Pricing
                 sb.AppendLine($"    <row r=\"{rowIndex}\">");
                 AppendInlineCell(sb, $"A{rowIndex}", row.Category, 0);
                 AppendInlineCell(sb, $"B{rowIndex}", row.ObjectName, 0);
-                AppendNumberCell(sb, $"C{rowIndex}", row.Coefficient);
+                AppendNumberCell(sb, $"C{rowIndex}", settings.GetCoefficient(row.Category, row.ObjectName, row.Coefficient));
                 AppendInlineCell(sb, $"D{rowIndex}", row.Remark, 0);
                 sb.AppendLine("    </row>");
             }
 
+            sb.AppendLine("    <row r=\"14\">");
+            AppendInlineCell(sb, "A14", "单价", 1);
+            AppendNumberCell(sb, "B14", settings.UnitPrice);
+            sb.AppendLine("    </row>");
+
+            sb.AppendLine("    <row r=\"16\">");
+            AppendInlineCell(sb, "A16", "等效特征数范围", 1);
+            AppendInlineCell(sb, "C16", "复杂度系数", 1);
+            AppendInlineCell(sb, "D16", "备注", 1);
+            sb.AppendLine("    </row>");
+
+            AppendComplexityRow(sb, 17, "0~15", settings.ComplexityPricing.Range0To15Coefficient, "含15");
+            AppendComplexityRow(sb, 18, "15~40", settings.ComplexityPricing.Range15To40Coefficient, "含40");
+            AppendComplexityRow(sb, 19, "40~80", settings.ComplexityPricing.Range40To80Coefficient, "含80");
+            AppendComplexityRow(sb, 20, "80以上", settings.ComplexityPricing.RangeOver80Coefficient, "");
+
             sb.AppendLine("  </sheetData>");
             sb.AppendLine("</worksheet>");
             return sb.ToString();
+        }
+
+        private static void AppendComplexityRow(StringBuilder sb, int rowIndex, string range, double coefficient, string remark)
+        {
+            sb.AppendLine($"    <row r=\"{rowIndex}\">");
+            AppendInlineCell(sb, $"A{rowIndex}", range, 0);
+            AppendNumberCell(sb, $"C{rowIndex}", coefficient);
+            AppendInlineCell(sb, $"D{rowIndex}", remark, 0);
+            sb.AppendLine("    </row>");
         }
 
         private static void AppendInlineCell(StringBuilder sb, string reference, string value, int styleIndex)

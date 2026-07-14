@@ -112,8 +112,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center" Margin="0,0,12,0"/>
-                    <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun"/>
+                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -141,7 +140,7 @@
 
                     <Grid Grid.Row="1" Margin="0,4,0,12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
@@ -153,7 +152,7 @@
 
                     <Grid Grid.Row="2" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
@@ -165,7 +164,7 @@
 
                     <Grid Grid.Row="3" Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
@@ -182,56 +181,62 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Text="折扣系数" Style="{StaticResource HeaderTextStyle}"/>
 
-                    <Grid Grid.Row="1" HorizontalAlignment="Left" Margin="0,4,0,4">
+                    <Grid Grid.Row="1" Margin="0,4,0,52">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,48,0">
+                        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="零件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbPartDiscount" Text="0.5" 
+                            <TextBox x:Name="tbPartDiscount" Text="0.5"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
-                                <Button Content="▲" Width="24" Height="14" Click="PartUp_Click" 
+                                <Button Content="▲" Width="24" Height="14" Click="PartUp_Click"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
-                                <Button Content="▼" Width="24" Height="14" Click="PartDown_Click" Margin="0,2,0,0" 
+                                <Button Content="▼" Width="24" Height="14" Click="PartDown_Click" Margin="0,2,0,0"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,48,0">
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="装配" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbAssemblyDiscount" Text="0.4" 
+                            <TextBox x:Name="tbAssemblyDiscount" Text="0.4"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
-                                <Button Content="▲" Width="24" Height="14" Click="AssemblyUp_Click" 
+                                <Button Content="▲" Width="24" Height="14" Click="AssemblyUp_Click"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
-                                <Button Content="▼" Width="24" Height="14" Click="AssemblyDown_Click" Margin="0,2,0,0" 
+                                <Button Content="▼" Width="24" Height="14" Click="AssemblyDown_Click" Margin="0,2,0,0"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
                             </StackPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                             <TextBlock Text="工程图" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbDrawingDiscount" Text="0.8" 
+                            <TextBox x:Name="tbDrawingDiscount" Text="0.8"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
-                                <Button Content="▲" Width="24" Height="14" Click="DrawingUp_Click" 
+                                <Button Content="▲" Width="24" Height="14" Click="DrawingUp_Click"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
-                                <Button Content="▼" Width="24" Height="14" Click="DrawingDown_Click" Margin="0,2,0,0" 
+                                <Button Content="▼" Width="24" Height="14" Click="DrawingDown_Click" Margin="0,2,0,0"
                                         Background="#E2E8F0" BorderThickness="0" Foreground="#475569" FontSize="8"/>
                             </StackPanel>
                         </StackPanel>
                     </Grid>
+
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun" Width="84" Margin="0,0,44,0"/>
+                        <Button Content="前往报表路径" Style="{StaticResource PrimaryButtonStyle}" Click="BtnOpenReportPath_Click" x:Name="btnOpenReportPath" Width="116"/>
+                    </StackPanel>
                 </Grid>
             </Border>
 

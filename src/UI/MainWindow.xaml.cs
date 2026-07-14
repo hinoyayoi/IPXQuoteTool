@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -17,6 +18,7 @@ namespace IPXQuoteTool
 {
     public partial class MainWindow : Window
     {
+        private static readonly TimeSpan DocumentProcessingTimeout = TimeSpan.FromMinutes(5);
         private SolidWorksService _swService;
         private UserPathSettingsService _pathSettingsService;
         private bool _isRunning;
@@ -202,6 +204,36 @@ namespace IPXQuoteTool
             Log("日志已清空");
         }
 
+        private void BtnOpenReportPath_Click(object sender, RoutedEventArgs e)
+        {
+            string reportPath = txtReportPath.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(reportPath))
+            {
+                MessageBox.Show("请先配置报表保存路径！");
+                return;
+            }
+
+            try
+            {
+                if (!Directory.Exists(reportPath))
+                {
+                    MessageBox.Show("报表保存路径不存在，请检查路径配置！");
+                    return;
+                }
+
+                SaveCurrentPaths();
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = reportPath,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"无法打开报表路径：\n{ex.Message}");
+            }
+        }
+
         private void Discount_PreviewTextInput(object sender, TextCompositionEventArgs e)
         {
             var tb = sender as System.Windows.Controls.TextBox;
@@ -210,40 +242,66 @@ namespace IPXQuoteTool
             {
                 newText = newText.Remove(tb.SelectionStart, tb.SelectionLength);
             }
-            newText = newText.Insert(tb.SelectionStart, e.Text);
 
+            newText = newText.Insert(tb.SelectionStart, e.Text);
             var regex = new Regex("^$|^[0-9](\\.[0-9]?)?$");
             e.Handled = !regex.IsMatch(newText);
         }
 
         private void Discount_LostFocus(object sender, RoutedEventArgs e)
         {
-            var tb = sender as System.Windows.Controls.TextBox;
-            FormatAndClamp(tb);
+            FormatAndClamp(sender as System.Windows.Controls.TextBox);
         }
 
         private void FormatAndClamp(System.Windows.Controls.TextBox tb)
         {
-            if (tb == null) return;
-            if (!double.TryParse(tb.Text, out double v))
+            if (tb == null)
+            {
+                return;
+            }
+
+            if (!double.TryParse(tb.Text, out double value))
             {
                 tb.Text = "0.5";
                 return;
             }
-            v = Math.Round(v, 1);
-            if (v < 0.4) v = 0.4;
-            if (v > 1.0) v = 1.0;
-            tb.Text = v.ToString("0.0");
+
+            value = Math.Round(value, 1);
+            if (value < 0.4)
+            {
+                value = 0.4;
+            }
+            if (value > 1.0)
+            {
+                value = 1.0;
+            }
+
+            tb.Text = value.ToString("0.0");
         }
 
         private void ChangeDiscount(System.Windows.Controls.TextBox tb, double delta)
         {
-            if (tb == null) return;
-            if (!double.TryParse(tb.Text, out double v)) v = 0.5;
-            v = Math.Round(v + delta, 1);
-            if (v < 0.4) v = 0.4;
-            if (v > 1.0) v = 1.0;
-            tb.Text = v.ToString("0.0");
+            if (tb == null)
+            {
+                return;
+            }
+
+            if (!double.TryParse(tb.Text, out double value))
+            {
+                value = 0.5;
+            }
+
+            value = Math.Round(value + delta, 1);
+            if (value < 0.4)
+            {
+                value = 0.4;
+            }
+            if (value > 1.0)
+            {
+                value = 1.0;
+            }
+
+            tb.Text = value.ToString("0.0");
         }
 
         private void PartUp_Click(object sender, RoutedEventArgs e) => ChangeDiscount(tbPartDiscount, 0.1);
@@ -279,12 +337,16 @@ namespace IPXQuoteTool
             FormatAndClamp(tbAssemblyDiscount);
             FormatAndClamp(tbDrawingDiscount);
 
+            ObjectCoefficientSettings objectCoefficientSettings = ObjectCoefficientSettingsService.Load();
+
             return new QuotePricingSettings
             {
                 PartDiscount = double.TryParse(tbPartDiscount.Text, out double partDiscount) ? partDiscount : 0.5,
                 AssemblyDiscount = double.TryParse(tbAssemblyDiscount.Text, out double assemblyDiscount) ? assemblyDiscount : 0.4,
                 DrawingDiscount = double.TryParse(tbDrawingDiscount.Text, out double drawingDiscount) ? drawingDiscount : 0.8,
-                ObjectCoefficients = ObjectCoefficientSettingsService.Load()
+                UnitPrice = objectCoefficientSettings.UnitPrice,
+                ComplexityPricing = objectCoefficientSettings.ComplexityPricing,
+                ObjectCoefficients = objectCoefficientSettings
             };
         }
         private async void BtnRun_Click(object sender, RoutedEventArgs e)
@@ -330,6 +392,11 @@ namespace IPXQuoteTool
                 {
                     LogError("请选择报表保存路径！");
                     MessageBox.Show("请选择报表保存路径！");
+                    return;
+                }
+
+                if (!useOfflineMode && !EnsureSolidWorksRegistrationOrExit(softwarePath))
+                {
                     return;
                 }
 
@@ -389,6 +456,76 @@ namespace IPXQuoteTool
                     _ = Dispatcher.BeginInvoke(new Action(Close));
                 }
             }
+        }
+
+        private bool EnsureSolidWorksRegistrationOrExit(string softwarePath)
+        {
+            if (!SolidWorksService.TryGetRegistrationMismatch(softwarePath, out SolidWorksRegistrationMismatch mismatch, out string error))
+            {
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    LogError(error);
+                    MessageBox.Show(error, "SolidWorks 注册检查失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+
+                return true;
+            }
+
+            string message =
+                "您选定的 SolidWorks 路径并非系统默认 SldWorks.Application 指向的路径，请确认。\n\n" +
+                $"选定路径：{mismatch.SelectedExePath}\n" +
+                $"系统默认：{(string.IsNullOrWhiteSpace(mismatch.DefaultExePath) ? "未注册或无法解析" : mismatch.DefaultExePath)}\n\n" +
+                "是否更改系统默认路径？\n\n" +
+                "该操作需要管理员权限，会修改注册表：\n" +
+                $"从 HKEY_CLASSES_ROOT\\{mismatch.SelectedProgId}\\CLSID 读取数值数据，\n" +
+                "并写入 HKEY_CLASSES_ROOT\\SldWorks.Application\\CLSID。\n" +
+                $"目标 CLSID：{mismatch.SelectedClsid}\n\n" +
+                "是否授权修改？";
+
+            MessageBoxResult result = MessageBox.Show(
+                this,
+                message,
+                "SolidWorks 默认版本不一致",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                Log("用户未授权修改 SolidWorks 默认注册路径，程序退出。");
+                _allowClose = true;
+                Close();
+                return false;
+            }
+
+            Log("用户授权修改 SolidWorks 默认注册路径，正在请求管理员权限...");
+            if (!SolidWorksService.SetDefaultSolidWorksClsidWithElevation(mismatch.SelectedClsid, out string updateError))
+            {
+                LogError(updateError);
+                MessageBox.Show(updateError, "注册表修改失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            if (SolidWorksService.TryGetRegistrationMismatch(softwarePath, out SolidWorksRegistrationMismatch stillMismatch, out string verifyError))
+            {
+                string verifyMessage =
+                    "注册表修改后，系统默认 SolidWorks 路径仍与所选路径不一致，请检查注册表权限或 SolidWorks 注册状态。\n\n" +
+                    $"选定路径：{stillMismatch.SelectedExePath}\n" +
+                    $"系统默认：{(string.IsNullOrWhiteSpace(stillMismatch.DefaultExePath) ? "未注册或无法解析" : stillMismatch.DefaultExePath)}";
+                LogError(verifyMessage);
+                MessageBox.Show(verifyMessage, "注册表修改未生效", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(verifyError))
+            {
+                LogError(verifyError);
+                MessageBox.Show(verifyError, "注册表修改验证失败", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            LogSuccess("SolidWorks 默认注册路径已更新，将继续分析报价。");
+            return true;
         }
 
         private ProcessingResult RunProcessing(bool useOfflineMode, string softwarePath, string drawingPath, string reportPath, QuotePricingSettings pricingSettings, IProgress<DocumentProgressUpdate> progress)
@@ -458,7 +595,7 @@ namespace IPXQuoteTool
                 string file = files[i];
                 DocumentInfo info = useOfflineMode
                     ? offlineService.ProcessDocument(file)
-                    : ProcessDocumentWithSolidWorksRecovery(file, softwarePath);
+                    : ProcessDocumentWithTimeout(file, softwarePath, DocumentProcessingTimeout);
 
                 if (info != null)
                 {
@@ -477,10 +614,20 @@ namespace IPXQuoteTool
                             break;
                     }
 
-                    string previewStatus = info.PreviewImageBytes?.Length > 0
-                        ? $"缩略图已获取，{info.PreviewImageBytes.Length / 1024.0:0.0} KB"
-                        : "未获取到缩略图";
-                    Log($"处理完成: {info.FileName} ({info.Category})，{previewStatus}");
+                    if (info.IsProcessingFailed)
+                    {
+                        LogError($"处理失败: {info.FileName}");
+                        LogError(info.ProcessingError);
+                        Log($"已在报表中保留失败图纸占位行: {info.FileName}");
+                    }
+                    else
+                    {
+                        string previewStatus = info.PreviewImageBytes?.Length > 0
+                            ? $"缩略图已获取，{info.PreviewImageBytes.Length / 1024.0:0.0} KB"
+                            : "未获取到缩略图";
+                        Log($"处理完成: {info.FileName} ({info.Category})，{previewStatus}");
+                    }
+
                     if (useOfflineMode && info.DocumentType == SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART)
                     {
                         Log("提示：离线读取模式无法读取零件 FeatureManager 特征树，零件特征数会显示为 0；如需统计特征数，请使用 SolidWorks 正常读取模式。");
@@ -533,6 +680,13 @@ namespace IPXQuoteTool
             };
         }
 
+        private static DocumentInfo CreateTimedOutDocumentPlaceholder(string filePath, TimeSpan timeout)
+        {
+            return CreateFailedDocumentPlaceholder(
+                filePath,
+                $"处理超时超过 {timeout.TotalMinutes:0} 分钟，已自动跳过，后续请人工排查该图纸。");
+        }
+
         private static SolidWorks.Interop.swconst.swDocumentTypes_e GetDocumentTypeFromPath(string filePath)
         {
             return Path.GetExtension(filePath).ToLowerInvariant() switch
@@ -546,37 +700,96 @@ namespace IPXQuoteTool
 
         private DocumentInfo ProcessDocumentWithSolidWorksRecovery(string file, string softwarePath)
         {
-            DocumentInfo info = _swService.ProcessDocument(file);
+            return ProcessDocumentWithSolidWorksRecovery(_swService, file, softwarePath);
+        }
+
+        private DocumentInfo ProcessDocumentWithTimeout(string file, string softwarePath, TimeSpan timeout)
+        {
+            DocumentInfo info = null;
+            string failureReason = null;
+
+            var thread = new Thread(() =>
+            {
+                var service = new SolidWorksService();
+                try
+                {
+                    if (!service.ConnectOrStart(softwarePath))
+                    {
+                        failureReason = string.IsNullOrWhiteSpace(service.LastError)
+                            ? "无法连接到 SolidWorks。"
+                            : service.LastError;
+                        return;
+                    }
+
+                    info = ProcessDocumentWithSolidWorksRecovery(service, file, softwarePath);
+                    if (info == null && !string.IsNullOrWhiteSpace(service.LastError))
+                    {
+                        failureReason = service.LastError;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    failureReason = ex.Message;
+                }
+                finally
+                {
+                    service.ResetConnection();
+                }
+            });
+
+            thread.IsBackground = true;
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+
+            if (!thread.Join(timeout))
+            {
+                LogError($"处理超时，已跳过: {Path.GetFileName(file)}");
+                LogError($"单图纸处理超过 {timeout.TotalMinutes:0} 分钟，正在尝试重置 SolidWorks 后继续。");
+                SolidWorksService.TryTerminateSolidWorksProcesses(softwarePath);
+                return CreateTimedOutDocumentPlaceholder(file, timeout);
+            }
+
             if (info != null)
             {
                 return info;
             }
 
-            if (_swService.IsConnectionAlive())
+            return CreateFailedDocumentPlaceholder(file, failureReason);
+        }
+
+        private DocumentInfo ProcessDocumentWithSolidWorksRecovery(SolidWorksService service, string file, string softwarePath)
+        {
+            DocumentInfo info = service.ProcessDocument(file);
+            if (info != null)
+            {
+                return info;
+            }
+
+            if (service.IsConnectionAlive())
             {
                 return null;
             }
 
             LogError($"检测到 SolidWorks 连接已断开，准备重启并重试当前文件: {Path.GetFileName(file)}");
-            _swService.ResetConnection();
+            service.ResetConnection();
 
-            if (!_swService.ConnectOrStart(softwarePath))
+            if (!service.ConnectOrStart(softwarePath))
             {
-                string error = string.IsNullOrWhiteSpace(_swService.LastError)
+                string error = string.IsNullOrWhiteSpace(service.LastError)
                     ? "SolidWorks 重启失败。"
-                    : _swService.LastError;
+                    : service.LastError;
                 LogError(error);
                 return null;
             }
 
             LogSuccess("SolidWorks 已重新连接，正在重试当前文件...");
-            info = _swService.ProcessDocument(file);
+            info = service.ProcessDocument(file);
             if (info == null)
             {
                 LogError($"重试后仍处理失败: {Path.GetFileName(file)}");
-                if (!string.IsNullOrWhiteSpace(_swService.LastError))
+                if (!string.IsNullOrWhiteSpace(service.LastError))
                 {
-                    LogError(_swService.LastError);
+                    LogError(service.LastError);
                 }
             }
 

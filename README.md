@@ -2,6 +2,24 @@
 
 IPX 报价工具，用于读取 SolidWorks 零件、装配体、工程图指标，并根据对象系数和文件类型系数生成报价报表。
 
+## 项目结构
+
+```text
+src\UI\                 WPF 界面与窗口代码
+src\Services\           SolidWorks/Document Manager 服务封装
+src\Analysis\           零件、装配体、工程图指标提取逻辑
+src\Pricing\            对象系数、单价、折扣和报价规则
+src\Reporting\          报价报表 xlsx 生成
+src\Settings\           用户路径配置读写
+src\Models\             报价过程使用的数据模型
+resources\Templates\    随软件发布的输入模板，例如对象系数.xlsx
+lib\SolidWorks\         SolidWorks 互操作 DLL
+packaging\              免安装包发布脚本
+artifacts\bin\          编译输出目录
+artifacts\obj\          编译中间产物目录
+artifacts\publish\      免安装发布包输出目录
+```
+
 ## 免安装打包
 
 在项目根目录打开 PowerShell：
@@ -13,20 +31,20 @@ cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
 生成默认小包版：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1
+powershell -ExecutionPolicy Bypass -File .\packaging\publish-portable.ps1
 ```
 
 生成结果：
 
 ```text
-publish\IPXQuoteTool_Portable\
-publish\IPXQuoteTool_Portable.zip
+artifacts\publish\IPXQuoteTool_Portable\
+artifacts\publish\IPXQuoteTool_Portable.zip
 ```
 
 发给客户时，发送这个压缩包：
 
 ```text
-publish\IPXQuoteTool_Portable.zip
+artifacts\publish\IPXQuoteTool_Portable.zip
 ```
 
 ## 客户使用方式
@@ -50,7 +68,7 @@ winget install --id Microsoft.DotNet.DesktopRuntime.10 --source winget --accept-
 如果希望客户不需要安装 .NET，可以生成自包含版：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1 -SelfContained
+powershell -ExecutionPolicy Bypass -File .\packaging\publish-portable.ps1 -SelfContained
 ```
 
 自包含版包体会明显变大，但客户电脑不需要额外安装 .NET Runtime。
