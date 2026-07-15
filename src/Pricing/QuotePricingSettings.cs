@@ -2,9 +2,9 @@
 {
     public class QuotePricingSettings
     {
-        public double PartDiscount { get; set; } = 0.5;
-        public double AssemblyDiscount { get; set; } = 0.4;
-        public double DrawingDiscount { get; set; } = 0.8;
+        public double PartDiscount { get; set; } = 1.0;
+        public double AssemblyDiscount { get; set; } = 1.0;
+        public double DrawingDiscount { get; set; } = 1.0;
         public double UnitPrice { get; set; } = 0.32;
         public ObjectCoefficientSettings ObjectCoefficients { get; set; } = ObjectCoefficientSettings.CreateDefault();
         public ComplexityPricingSettings ComplexityPricing { get; set; } = ComplexityPricingSettings.CreateDefault();

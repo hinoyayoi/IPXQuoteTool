@@ -28,6 +28,19 @@ namespace IPXQuoteTool
             base.OnClosing(e);
         }
 
+        private void ShowSingleFilePanel_Click(object sender, RoutedEventArgs e)
+        {
+            singleFilePanel.Visibility = Visibility.Visible;
+            btnEnableSingleFile.Visibility = Visibility.Visible;
+            txtSingleFilePath.Focus();
+        }
+
+        private void CloseSingleFilePanel_Click(object sender, RoutedEventArgs e)
+        {
+            singleFilePanel.Visibility = Visibility.Collapsed;
+            btnEnableSingleFile.Visibility = Visibility.Collapsed;
+        }
+
         private void Browse_Click(object sender, RoutedEventArgs e)
         {
             using var dialog = new WinForms.OpenFileDialog

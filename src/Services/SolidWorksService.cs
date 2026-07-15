@@ -917,7 +917,7 @@ namespace IPXQuoteTool
                     Directory.CreateDirectory(reportPath);
                 }
 
-                string filePath = Path.Combine(reportPath, $"报价报表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+                string filePath = Path.Combine(reportPath, $"费用估算_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
                 File.WriteAllBytes(filePath, content);
                 return true;
             }

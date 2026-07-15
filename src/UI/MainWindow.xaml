@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:IPXQuoteTool"
         mc:Ignorable="d"
-        Title="IPX报价工具" Height="600" Width="900" MinWidth="700" MinHeight="500"
+        Title="IPX费用估算" Height="600" Width="900" MinWidth="700" MinHeight="500"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style x:Key="CardStyle" TargetType="Border">
@@ -108,7 +108,7 @@
                 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="📋" FontSize="24" Margin="0,0,12,0"/>
-                    <TextBlock x:Name="txtAppTitle" Text="IPX 报价工具" FontSize="18" FontWeight="Bold" Foreground="White"
+                    <TextBlock x:Name="txtAppTitle" Text="IPX 费用估算" FontSize="18" FontWeight="Bold" Foreground="White"
                                MouseLeftButtonUp="AppTitle_MouseLeftButtonUp"/>
                 </StackPanel>
 
@@ -196,7 +196,7 @@
 
                         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                             <TextBlock Text="零件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbPartDiscount" Text="0.5"
+                            <TextBox x:Name="tbPartDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
@@ -209,7 +209,7 @@
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="装配" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbAssemblyDiscount" Text="0.4"
+                            <TextBox x:Name="tbAssemblyDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
@@ -222,7 +222,7 @@
 
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
                             <TextBlock Text="工程图" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                            <TextBox x:Name="tbDrawingDiscount" Text="0.8"
+                            <TextBox x:Name="tbDrawingDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">

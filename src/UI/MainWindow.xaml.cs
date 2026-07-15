@@ -41,7 +41,7 @@ namespace IPXQuoteTool
             _pathSettingsService = new UserPathSettingsService();
             LoadSavedPaths();
             string coefficientFilePath = ObjectCoefficientSettingsService.EnsureDefaultFile();
-            Log("IPX报价工具已启动");
+            Log("IPX费用估算已启动");
             Log($"对象系数表: {coefficientFilePath}");
             Log("等待用户配置...");
             _progressReporter = new Progress<DocumentProgressUpdate>(ApplyProgressUpdate);
@@ -126,7 +126,7 @@ namespace IPXQuoteTool
             {
                 _developerSingleFileMode = false;
                 _developerSingleFilePath = null;
-                Log("开发者单文件报价已关闭，恢复目录批量模式。");
+                Log("开发者单文件费用估算已关闭，恢复目录批量模式。");
                 return;
             }
 
@@ -134,7 +134,7 @@ namespace IPXQuoteTool
             {
                 _developerSingleFileMode = true;
                 _developerSingleFilePath = window.SingleFilePath;
-                Log($"开发者单文件报价已启用: {_developerSingleFilePath}");
+                Log($"开发者单文件费用估算已启用: {_developerSingleFilePath}");
             }
         }
 
@@ -393,9 +393,9 @@ namespace IPXQuoteTool
 
             return new QuotePricingSettings
             {
-                PartDiscount = double.TryParse(tbPartDiscount.Text, out double partDiscount) ? partDiscount : 0.5,
-                AssemblyDiscount = double.TryParse(tbAssemblyDiscount.Text, out double assemblyDiscount) ? assemblyDiscount : 0.4,
-                DrawingDiscount = double.TryParse(tbDrawingDiscount.Text, out double drawingDiscount) ? drawingDiscount : 0.8,
+                PartDiscount = double.TryParse(tbPartDiscount.Text, out double partDiscount) ? partDiscount : 1.0,
+                AssemblyDiscount = double.TryParse(tbAssemblyDiscount.Text, out double assemblyDiscount) ? assemblyDiscount : 1.0,
+                DrawingDiscount = double.TryParse(tbDrawingDiscount.Text, out double drawingDiscount) ? drawingDiscount : 1.0,
                 UnitPrice = objectCoefficientSettings.UnitPrice,
                 ComplexityPricing = objectCoefficientSettings.ComplexityPricing,
                 ObjectCoefficients = objectCoefficientSettings
@@ -437,7 +437,7 @@ namespace IPXQuoteTool
                 if (_developerSingleFileMode && !IsSupportedSolidWorksFile(_developerSingleFilePath))
                 {
                     LogError("开发者单文件路径无效！");
-                    MessageBox.Show("开发者单文件路径无效，请重新进入开发者模块选择有效文件。");
+                    MessageBox.Show("开发者单文件路径无效，请重新进入开发者模式选择有效文件。");
                     return;
                 }
                 if (!_developerSingleFileMode && string.IsNullOrWhiteSpace(drawingPath))

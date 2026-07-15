@@ -122,7 +122,7 @@ namespace IPXQuoteTool.Reporting
 
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.AppendLine("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
-            sb.AppendLine($"  <dimension ref=\"A1:I{worksheetLastRow}\"/>");
+            sb.AppendLine($"  <dimension ref=\"A1:H{worksheetLastRow}\"/>");
             sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"2\" topLeftCell=\"A3\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             sb.AppendLine("  <cols>");
             sb.AppendLine("    <col min=\"1\" max=\"1\" width=\"8\" customWidth=\"1\"/>");
@@ -131,9 +131,8 @@ namespace IPXQuoteTool.Reporting
             sb.AppendLine("    <col min=\"4\" max=\"4\" width=\"12\" customWidth=\"1\"/>");
             sb.AppendLine("    <col min=\"5\" max=\"5\" width=\"14\" customWidth=\"1\"/>");
             sb.AppendLine("    <col min=\"6\" max=\"6\" width=\"10\" customWidth=\"1\"/>");
-            sb.AppendLine("    <col min=\"7\" max=\"7\" width=\"12\" customWidth=\"1\"/>");
-            sb.AppendLine("    <col min=\"8\" max=\"8\" width=\"14\" customWidth=\"1\"/>");
-            sb.AppendLine("    <col min=\"9\" max=\"9\" width=\"32\" customWidth=\"1\"/>");
+            sb.AppendLine("    <col min=\"7\" max=\"7\" width=\"14\" customWidth=\"1\"/>");
+            sb.AppendLine("    <col min=\"8\" max=\"8\" width=\"32\" customWidth=\"1\"/>");
             sb.AppendLine("  </cols>");
             sb.AppendLine("  <sheetData>");
 
@@ -144,9 +143,8 @@ namespace IPXQuoteTool.Reporting
             AppendIntegerCell(sb, "D1", documentCount, 1);
             AppendInlineCell(sb, "E1", "等效特\n征数", 1);
             AppendNumberCell(sb, "F1", totalComplexityScore, 1);
-            AppendInlineCell(sb, "G1", "总价\n(元)", 1);
-            AppendFormulaNumberCell(sb, "H1", $"SUM(H3:H{Math.Max(lastRow, 3)})", totalPrice, 1);
-            AppendInlineCell(sb, "I1", string.Empty, 1);
+            AppendInlineCell(sb, "G1", "估算总价\n(元)", 1);
+            AppendFormulaNumberCell(sb, "H1", $"SUM(G3:G{Math.Max(lastRow, 3)})", totalPrice, 1);
             sb.AppendLine("    </row>");
 
             sb.AppendLine("    <row r=\"2\" ht=\"34\" customHeight=\"1\">");
@@ -156,9 +154,8 @@ namespace IPXQuoteTool.Reporting
             AppendInlineCell(sb, "D2", "类别", 2);
             AppendInlineCell(sb, "E2", "图纸对象", 2);
             AppendInlineCell(sb, "F2", "计数", 2);
-            AppendInlineCell(sb, "G2", "复杂度系数", 2);
-            AppendInlineCell(sb, "H2", "报价(元)", 2);
-            AppendInlineCell(sb, "I2", "图纸路径", 2);
+            AppendInlineCell(sb, "G2", "估算单价(元)", 2);
+            AppendInlineCell(sb, "H2", "图纸路径", 2);
             sb.AppendLine("    </row>");
 
             int rowIndex = 3;
@@ -184,9 +181,8 @@ namespace IPXQuoteTool.Reporting
                         AppendInlineCell(sb, $"D{rowIndex}", reportRow.Document.Category, 3);
                         AppendInlineCell(sb, $"E{rowIndex}", objectRow.Name, 3);
                         AppendIntegerCell(sb, $"F{rowIndex}", objectRow.Count, 4);
-                        AppendNumberCell(sb, $"G{rowIndex}", reportRow.Price.ComplexityCoefficient, 3);
-                        AppendFormulaNumberCell(sb, $"H{rowIndex}", $"{reportRow.Price.ComplexityScore.ToString("0.00", CultureInfo.InvariantCulture)}*{reportRow.Price.UnitPrice.ToString("0.####", CultureInfo.InvariantCulture)}*G{rowIndex}*{reportRow.Price.DiscountCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}", reportRow.Price.FinalScore, 3);
-                        AppendInlineCell(sb, $"I{rowIndex}", GetDisplayFilePath(reportRow.Document), 3);
+                        AppendFormulaNumberCell(sb, $"G{rowIndex}", $"{reportRow.Price.ComplexityScore.ToString("0.00", CultureInfo.InvariantCulture)}*{reportRow.Price.UnitPrice.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.ComplexityCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.DiscountCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}", reportRow.Price.FinalScore, 3);
+                        AppendInlineCell(sb, $"H{rowIndex}", GetDisplayFilePath(reportRow.Document), 3);
                     }
                     else
                     {
@@ -199,7 +195,7 @@ namespace IPXQuoteTool.Reporting
 
                 if (endRow > startRow)
                 {
-                    foreach (string column in new[] { "A", "B", "C", "D", "G", "H", "I" })
+                    foreach (string column in new[] { "A", "B", "C", "D", "G", "H" })
                     {
                         merges.Add($"{column}{startRow}:{column}{endRow}");
                     }
@@ -346,7 +342,7 @@ namespace IPXQuoteTool.Reporting
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <sheets>
-    <sheet name="报价报表" sheetId="1" r:id="rId1"/>
+    <sheet name="费用估算" sheetId="1" r:id="rId1"/>
   </sheets>
   <calcPr calcId="0" calcMode="auto" fullCalcOnLoad="1"/>
 </workbook>
