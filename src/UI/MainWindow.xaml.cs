@@ -19,12 +19,18 @@ namespace IPXQuoteTool
     public partial class MainWindow : Window
     {
         private static readonly TimeSpan DocumentProcessingTimeout = TimeSpan.FromMinutes(5);
+        private const int DeveloperModeClickThreshold = 7;
+        private static readonly TimeSpan DeveloperModeClickWindow = TimeSpan.FromSeconds(3);
         private SolidWorksService _swService;
         private UserPathSettingsService _pathSettingsService;
         private bool _isRunning;
         private bool _cancelRequested;
         private bool _closeAfterCancel;
         private bool _allowClose;
+        private bool _developerSingleFileMode;
+        private string _developerSingleFilePath;
+        private int _developerTitleClickCount;
+        private DateTime _firstDeveloperTitleClickTime;
         private Progress<DocumentProgressUpdate> _progressReporter;
 
         public MainWindow()
@@ -84,6 +90,52 @@ namespace IPXQuoteTool
             pathConfigPanel.IsEnabled = isEnabled;
             discountPanel.IsEnabled = isEnabled;
             chkOfflineMode.IsEnabled = isEnabled;
+        }
+
+        private void AppTitle_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            DateTime now = DateTime.Now;
+            if (_developerTitleClickCount == 0 || now - _firstDeveloperTitleClickTime > DeveloperModeClickWindow)
+            {
+                _firstDeveloperTitleClickTime = now;
+                _developerTitleClickCount = 1;
+            }
+            else
+            {
+                _developerTitleClickCount++;
+            }
+
+            if (_developerTitleClickCount < DeveloperModeClickThreshold)
+            {
+                return;
+            }
+
+            _developerTitleClickCount = 0;
+            ShowDeveloperModeWindow();
+        }
+
+        private void ShowDeveloperModeWindow()
+        {
+            var window = new DeveloperModeWindow(_developerSingleFilePath)
+            {
+                Owner = this
+            };
+
+            bool? result = window.ShowDialog();
+            if (window.ResetDeveloperMode)
+            {
+                _developerSingleFileMode = false;
+                _developerSingleFilePath = null;
+                Log("开发者单文件报价已关闭，恢复目录批量模式。");
+                return;
+            }
+
+            if (result == true && window.EnableSingleFileMode)
+            {
+                _developerSingleFileMode = true;
+                _developerSingleFilePath = window.SingleFilePath;
+                Log($"开发者单文件报价已启用: {_developerSingleFilePath}");
+            }
         }
 
         private void Log(string message)
@@ -382,7 +434,13 @@ namespace IPXQuoteTool
                     MessageBox.Show("请选择 SolidWorks 安装路径！");
                     return;
                 }
-                if (string.IsNullOrWhiteSpace(drawingPath))
+                if (_developerSingleFileMode && !IsSupportedSolidWorksFile(_developerSingleFilePath))
+                {
+                    LogError("开发者单文件路径无效！");
+                    MessageBox.Show("开发者单文件路径无效，请重新进入开发者模块选择有效文件。");
+                    return;
+                }
+                if (!_developerSingleFileMode && string.IsNullOrWhiteSpace(drawingPath))
                 {
                     LogError("请选择图纸路径！");
                     MessageBox.Show("请选择图纸路径！");
@@ -405,7 +463,14 @@ namespace IPXQuoteTool
                 Log("=");
                 Log("开始处理...");
                 Log($"SolidWorks路径: {softwarePath}");
-                Log($"图纸路径: {drawingPath}");
+                if (_developerSingleFileMode)
+                {
+                    Log($"开发者单文件: {_developerSingleFilePath}");
+                }
+                else
+                {
+                    Log($"图纸路径: {drawingPath}");
+                }
                 Log($"报表路径: {reportPath}");
 
                 QuotePricingSettings pricingSettings = BuildPricingSettings();
@@ -552,13 +617,13 @@ namespace IPXQuoteTool
 
             progress.Report(new DocumentProgressUpdate("扫描文件...", 0, 1, 0, 0, 0));
 
-            if (!Directory.Exists(drawingPath))
+            if (!_developerSingleFileMode && !Directory.Exists(drawingPath))
             {
                 LogError("指定的图纸路径无效！");
                 throw new InvalidOperationException("指定的图纸路径无效！");
             }
 
-            List<string> files = _swService.GetSolidWorksFiles(drawingPath);
+            List<string> files = GetFilesForProcessing(drawingPath);
             if (files.Count == 0)
             {
                 LogError("未找到 SolidWorks 文件（.sldprt/.sldasm/.slddrw）！");
@@ -668,6 +733,18 @@ namespace IPXQuoteTool
             return new ProcessingResult(results.Count, saveSuccess, false);
         }
 
+        private List<string> GetFilesForProcessing(string drawingPath)
+        {
+            if (_developerSingleFileMode)
+            {
+                return IsSupportedSolidWorksFile(_developerSingleFilePath)
+                    ? new List<string> { _developerSingleFilePath }
+                    : new List<string>();
+            }
+
+            return _swService.GetSolidWorksFiles(drawingPath);
+        }
+
         private static DocumentInfo CreateFailedDocumentPlaceholder(string filePath, string failureReason)
         {
             return new DocumentInfo
@@ -696,6 +773,16 @@ namespace IPXQuoteTool
                 ".slddrw" => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocDRAWING,
                 _ => SolidWorks.Interop.swconst.swDocumentTypes_e.swDocNONE
             };
+        }
+
+        private static bool IsSupportedSolidWorksFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                return false;
+            }
+
+            return GetDocumentTypeFromPath(filePath) != SolidWorks.Interop.swconst.swDocumentTypes_e.swDocNONE;
         }
 
         private DocumentInfo ProcessDocumentWithSolidWorksRecovery(string file, string softwarePath)

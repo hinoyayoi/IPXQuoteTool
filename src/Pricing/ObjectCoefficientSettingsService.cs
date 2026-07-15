@@ -183,8 +183,9 @@ namespace IPXQuoteTool.Pricing
             try
             {
                 Dictionary<string, string> cells = ReadCellMap(filePath);
-                return cells.Values.Any(value => value == "单价") &&
-                       cells.Values.Any(value => value == "等效特征数范围");
+                return cells.Values.Any(value => ContainsCellText(value, "单价")) &&
+                       cells.Values.Any(value => ContainsCellText(value, "等效特征数范围")) &&
+                       cells.Values.Any(value => ContainsCellText(value, "最大特征数"));
             }
             catch
             {
@@ -192,31 +193,52 @@ namespace IPXQuoteTool.Pricing
             }
         }
 
+        private static bool ContainsCellText(string value, string expectedText)
+        {
+            return !string.IsNullOrWhiteSpace(value) &&
+                   value.Replace("\n", string.Empty).Replace("\r", string.Empty).Contains(expectedText);
+        }
+
         private static void LoadPricingSections(string filePath, ObjectCoefficientSettings settings)
         {
             Dictionary<string, string> cells = ReadCellMap(filePath);
 
-            if (TryParseCoefficient(GetCell(cells, "B14"), out double unitPrice) && unitPrice > 0)
+            if (TryParseCoefficient(GetFirstCell(cells, "B15", "B14"), out double unitPrice) && unitPrice > 0)
             {
                 settings.UnitPrice = unitPrice;
             }
 
-            if (TryParseCoefficient(GetCell(cells, "C17"), out double range0To15))
+            if (TryParseCoefficient(GetFirstCell(cells, "B19", "B17"), out double range0Max) && range0Max > 0)
+            {
+                settings.ComplexityPricing.Range0MaxFeatureCount = range0Max;
+            }
+
+            if (TryParseCoefficient(GetFirstCell(cells, "B20", "B18"), out double range1Max) && range1Max > 0)
+            {
+                settings.ComplexityPricing.Range1MaxFeatureCount = range1Max;
+            }
+
+            if (TryParseCoefficient(GetFirstCell(cells, "B21", "B19"), out double range2Max) && range2Max > 0)
+            {
+                settings.ComplexityPricing.Range2MaxFeatureCount = range2Max;
+            }
+
+            if (TryParseCoefficient(GetFirstCell(cells, "C19", "C17"), out double range0To15))
             {
                 settings.ComplexityPricing.Range0To15Coefficient = range0To15;
             }
 
-            if (TryParseCoefficient(GetCell(cells, "C18"), out double range15To40))
+            if (TryParseCoefficient(GetFirstCell(cells, "C20", "C18"), out double range15To40))
             {
                 settings.ComplexityPricing.Range15To40Coefficient = range15To40;
             }
 
-            if (TryParseCoefficient(GetCell(cells, "C19"), out double range40To80))
+            if (TryParseCoefficient(GetFirstCell(cells, "C21", "C19"), out double range40To80))
             {
                 settings.ComplexityPricing.Range40To80Coefficient = range40To80;
             }
 
-            if (TryParseCoefficient(GetCell(cells, "C20"), out double rangeOver80))
+            if (TryParseCoefficient(GetFirstCell(cells, "C22", "C20"), out double rangeOver80))
             {
                 settings.ComplexityPricing.RangeOver80Coefficient = rangeOver80;
             }
@@ -253,6 +275,20 @@ namespace IPXQuoteTool.Pricing
         private static string GetCell(Dictionary<string, string> cells, string reference)
         {
             return cells.TryGetValue(reference, out string value) ? value.Trim() : string.Empty;
+        }
+
+        private static string GetFirstCell(Dictionary<string, string> cells, params string[] references)
+        {
+            foreach (string reference in references)
+            {
+                string value = GetCell(cells, reference);
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+
+            return string.Empty;
         }
 
         private static void WriteDefaultFile(string filePath)
@@ -364,7 +400,7 @@ namespace IPXQuoteTool.Pricing
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.AppendLine("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            sb.AppendLine("  <dimension ref=\"A1:D20\"/>");
+            sb.AppendLine("  <dimension ref=\"A1:D22\"/>");
             sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             sb.AppendLine("  <cols><col min=\"1\" max=\"1\" width=\"14\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"18\" customWidth=\"1\"/><col min=\"3\" max=\"3\" width=\"42\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"72\" customWidth=\"1\"/></cols>");
             sb.AppendLine("  <sheetData>");
@@ -388,33 +424,73 @@ namespace IPXQuoteTool.Pricing
             }
 
             sb.AppendLine("    <row r=\"14\">");
-            AppendInlineCell(sb, "A14", "单价", 1);
-            AppendNumberCell(sb, "B14", settings.UnitPrice);
+            AppendInlineCell(sb, "A14", "报价基准", 1);
+            AppendInlineCell(sb, "B14", "单价（元/步，可配置）", 1);
             sb.AppendLine("    </row>");
 
-            sb.AppendLine("    <row r=\"16\">");
-            AppendInlineCell(sb, "A16", "等效特征数范围", 1);
-            AppendInlineCell(sb, "C16", "复杂度系数", 1);
-            AppendInlineCell(sb, "D16", "备注", 1);
+            sb.AppendLine("    <row r=\"15\">");
+            AppendInlineCell(sb, "A15", "取值范围", 1);
+            AppendNumberCell(sb, "B15", settings.UnitPrice);
             sb.AppendLine("    </row>");
 
-            AppendComplexityRow(sb, 17, "0~15", settings.ComplexityPricing.Range0To15Coefficient, "含15");
-            AppendComplexityRow(sb, 18, "15~40", settings.ComplexityPricing.Range15To40Coefficient, "含40");
-            AppendComplexityRow(sb, 19, "40~80", settings.ComplexityPricing.Range40To80Coefficient, "含80");
-            AppendComplexityRow(sb, 20, "80以上", settings.ComplexityPricing.RangeOver80Coefficient, "");
+            sb.AppendLine("    <row r=\"18\">");
+            AppendInlineCell(sb, "A18", "等效特征数范围", 1);
+            AppendInlineCell(sb, "B18", "最大特征数", 1);
+            AppendInlineCell(sb, "C18", "复杂度系数", 1);
+            AppendInlineCell(sb, "D18", "备注", 1);
+            sb.AppendLine("    </row>");
+
+            AppendComplexityRow(sb, 19, BuildRangeLabel(0, settings.ComplexityPricing.Range0MaxFeatureCount), settings.ComplexityPricing.Range0MaxFeatureCount, settings.ComplexityPricing.Range0To15Coefficient, $"含{FormatReferenceNumber(settings.ComplexityPricing.Range0MaxFeatureCount)}");
+            AppendComplexityRow(sb, 20, BuildRangeLabel(settings.ComplexityPricing.Range0MaxFeatureCount, settings.ComplexityPricing.Range1MaxFeatureCount), settings.ComplexityPricing.Range1MaxFeatureCount, settings.ComplexityPricing.Range15To40Coefficient, $"含{FormatReferenceNumber(settings.ComplexityPricing.Range1MaxFeatureCount)}");
+            AppendComplexityRow(sb, 21, BuildRangeLabel(settings.ComplexityPricing.Range1MaxFeatureCount, settings.ComplexityPricing.Range2MaxFeatureCount), settings.ComplexityPricing.Range2MaxFeatureCount, settings.ComplexityPricing.Range40To80Coefficient, $"含{FormatReferenceNumber(settings.ComplexityPricing.Range2MaxFeatureCount)}");
+            AppendComplexityOverMaxRow(sb, 22, settings.ComplexityPricing.Range2MaxFeatureCount, settings.ComplexityPricing.RangeOver80Coefficient);
 
             sb.AppendLine("  </sheetData>");
             sb.AppendLine("</worksheet>");
             return sb.ToString();
         }
 
-        private static void AppendComplexityRow(StringBuilder sb, int rowIndex, string range, double coefficient, string remark)
+        private static void AppendComplexityRow(StringBuilder sb, int rowIndex, string range, double maxFeatureCount, double coefficient, string remark)
         {
             sb.AppendLine($"    <row r=\"{rowIndex}\">");
             AppendInlineCell(sb, $"A{rowIndex}", range, 0);
+            AppendNumberCell(sb, $"B{rowIndex}", maxFeatureCount);
             AppendNumberCell(sb, $"C{rowIndex}", coefficient);
             AppendInlineCell(sb, $"D{rowIndex}", remark, 0);
             sb.AppendLine("    </row>");
+        }
+
+        private static void AppendComplexityOverMaxRow(StringBuilder sb, int rowIndex, double previousMaxFeatureCount, double coefficient)
+        {
+            sb.AppendLine($"    <row r=\"{rowIndex}\">");
+            AppendInlineCell(sb, $"A{rowIndex}", $"{FormatReferenceNumber(previousMaxFeatureCount)}以上", 0);
+            AppendInlineCell(sb, $"B{rowIndex}", string.Empty, 0);
+            AppendNumberCell(sb, $"C{rowIndex}", coefficient);
+            AppendInlineCell(sb, $"D{rowIndex}", string.Empty, 0);
+            sb.AppendLine("    </row>");
+        }
+
+        private static string BuildRangeLabel(double previousMaxFeatureCount, double currentMaxFeatureCount)
+        {
+            if (previousMaxFeatureCount <= 0)
+            {
+                return $"0~{FormatReferenceNumber(currentMaxFeatureCount)}";
+            }
+
+            double start = IsWholeNumber(previousMaxFeatureCount)
+                ? previousMaxFeatureCount + 1
+                : previousMaxFeatureCount;
+            return $"{FormatReferenceNumber(start)}~{FormatReferenceNumber(currentMaxFeatureCount)}";
+        }
+
+        private static bool IsWholeNumber(double value)
+        {
+            return Math.Abs(value - Math.Round(value)) < 0.000001;
+        }
+
+        private static string FormatReferenceNumber(double value)
+        {
+            return value.ToString("0.####", CultureInfo.InvariantCulture);
         }
 
         private static void AppendInlineCell(StringBuilder sb, string reference, string value, int styleIndex)

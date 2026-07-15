@@ -12,6 +12,9 @@
 
     public class ComplexityPricingSettings
     {
+        public double Range0MaxFeatureCount { get; set; } = 15;
+        public double Range1MaxFeatureCount { get; set; } = 40;
+        public double Range2MaxFeatureCount { get; set; } = 80;
         public double Range0To15Coefficient { get; set; } = 0.2;
         public double Range15To40Coefficient { get; set; } = 0.6;
         public double Range40To80Coefficient { get; set; } = 0.8;
@@ -24,17 +27,21 @@
 
         public double GetCoefficient(double equivalentFeatureCount)
         {
-            if (equivalentFeatureCount <= 15)
+            double firstMax = Range0MaxFeatureCount > 0 ? Range0MaxFeatureCount : 15;
+            double secondMax = Range1MaxFeatureCount > firstMax ? Range1MaxFeatureCount : 40;
+            double thirdMax = Range2MaxFeatureCount > secondMax ? Range2MaxFeatureCount : 80;
+
+            if (equivalentFeatureCount <= firstMax)
             {
                 return Range0To15Coefficient;
             }
 
-            if (equivalentFeatureCount <= 40)
+            if (equivalentFeatureCount <= secondMax)
             {
                 return Range15To40Coefficient;
             }
 
-            if (equivalentFeatureCount <= 80)
+            if (equivalentFeatureCount <= thirdMax)
             {
                 return Range40To80Coefficient;
             }

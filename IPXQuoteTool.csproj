@@ -16,6 +16,7 @@
   <ItemGroup>
     <ApplicationDefinition Include="src\UI\App.xaml" />
     <Page Include="src\UI\MainWindow.xaml" />
+    <Page Include="src\UI\DeveloperModeWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>
