@@ -658,6 +658,7 @@ namespace IPXQuoteTool
                 }
 
                 string file = files[i];
+                Log($"处理开始: {Path.GetFileName(file)}，开始时间: {FormatProcessingTime(DateTime.Now)}");
                 DocumentInfo info = useOfflineMode
                     ? offlineService.ProcessDocument(file)
                     : ProcessDocumentWithTimeout(file, softwarePath, DocumentProcessingTimeout);
@@ -681,7 +682,7 @@ namespace IPXQuoteTool
 
                     if (info.IsProcessingFailed)
                     {
-                        LogError($"处理失败: {info.FileName}");
+                        LogError($"处理失败: {info.FileName}，结束时间: {FormatProcessingTime(DateTime.Now)}");
                         LogError(info.ProcessingError);
                         Log($"已在报表中保留失败图纸占位行: {info.FileName}");
                     }
@@ -690,7 +691,7 @@ namespace IPXQuoteTool
                         string previewStatus = info.PreviewImageBytes?.Length > 0
                             ? $"缩略图已获取，{info.PreviewImageBytes.Length / 1024.0:0.0} KB"
                             : "未获取到缩略图";
-                        Log($"处理完成: {info.FileName} ({info.Category})，{previewStatus}");
+                        Log($"处理完成: {info.FileName} ({info.Category})，结束时间: {FormatProcessingTime(DateTime.Now)}，{previewStatus}");
                     }
 
                     if (useOfflineMode && info.DocumentType == SolidWorks.Interop.swconst.swDocumentTypes_e.swDocPART)
@@ -700,7 +701,7 @@ namespace IPXQuoteTool
                 }
                 else
                 {
-                    LogError($"处理失败: {Path.GetFileName(file)}");
+                    LogError($"处理失败: {Path.GetFileName(file)}，结束时间: {FormatProcessingTime(DateTime.Now)}");
                     string failureReason = null;
                     if (useOfflineMode && !string.IsNullOrWhiteSpace(offlineService.LastError))
                     {
@@ -759,9 +760,16 @@ namespace IPXQuoteTool
 
         private static DocumentInfo CreateTimedOutDocumentPlaceholder(string filePath, TimeSpan timeout)
         {
-            return CreateFailedDocumentPlaceholder(
+            DocumentInfo info = CreateFailedDocumentPlaceholder(
                 filePath,
                 $"处理超时超过 {timeout.TotalMinutes:0} 分钟，已自动跳过，后续请人工排查该图纸。");
+            info.IsProcessingTimedOut = true;
+            return info;
+        }
+
+        private static string FormatProcessingTime(DateTime time)
+        {
+            return time.ToString("yyyy-MM-dd HH:mm:ss");
         }
 
         private static SolidWorks.Interop.swconst.swDocumentTypes_e GetDocumentTypeFromPath(string filePath)
@@ -832,6 +840,7 @@ namespace IPXQuoteTool
             {
                 LogError($"处理超时，已跳过: {Path.GetFileName(file)}");
                 LogError($"单图纸处理超过 {timeout.TotalMinutes:0} 分钟，正在尝试重置 SolidWorks 后继续。");
+                LogError("图纸处理超时，请人工手动排查");
                 SolidWorksService.TryTerminateSolidWorksProcesses(softwarePath);
                 return CreateTimedOutDocumentPlaceholder(file, timeout);
             }

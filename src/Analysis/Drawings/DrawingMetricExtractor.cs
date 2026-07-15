@@ -47,7 +47,7 @@ namespace IPXQuoteTool.Analysis.Drawings
                     {
                         int annotationCount = CountAnnotationsInView(model, viewInfo);
                         dimensionCount += annotationCount;
-                        noteCount += viewInfo.IsSheetView ? 0 : CountNotesInView(viewInfo.View);
+                        noteCount += CountNotesInView(model, viewInfo);
 
                         if (!viewInfo.IsSheetView)
                         {
@@ -144,16 +144,9 @@ namespace IPXQuoteTool.Analysis.Drawings
             return views;
         }
 
-        private static int CountNotesInView(View view)
+        private static int CountNotesInView(ModelDoc2 model, ViewInfo viewInfo)
         {
-            try
-            {
-                return view.GetNoteCount();
-            }
-            catch
-            {
-                return 0;
-            }
+            return CountFilteredNotesInView(model, viewInfo, logObjects: false);
         }
 
         private static int CountAnnotationsInView(ModelDoc2 model, ViewInfo viewInfo)
@@ -162,11 +155,7 @@ namespace IPXQuoteTool.Analysis.Drawings
             int count = 0;
 
             count += CountAndLogObjects(model, view, "标注:焊缝bead", () => view.GetWeldBeads(), () => view.GetWeldBeadCount());
-
-            if (!viewInfo.IsSheetView)
-            {
-                count += CountAndLogObjects(model, view, "标注:普通注释", () => view.GetNotes(), () => view.GetNoteCount());
-            }
+            count += CountFilteredNotesInView(model, viewInfo, logObjects: true);
 
             count += CountAndLogObjects(model, view, "标注:基准标签", () => view.GetDatumTags(), () => view.GetDatumTagCount());
             count += CountAndLogObjects(model, view, "标注:基准目标", () => view.GetDatumTargetSyms(), () => view.GetDatumTargetSymCount());
@@ -180,6 +169,273 @@ namespace IPXQuoteTool.Analysis.Drawings
             count += CountAndLogObjects(model, view, "标注:可见尺寸", () => view.GetDisplayDimensions(), () => CountDimensionsInView(view));
 
             return count;
+        }
+
+        private static int CountFilteredNotesInView(ModelDoc2 model, ViewInfo viewInfo, bool logObjects)
+        {
+            try
+            {
+                object notesObj = viewInfo.View.GetNotes();
+                if (notesObj is not Array notes)
+                {
+                    return 0;
+                }
+
+                int count = 0;
+                foreach (object note in notes)
+                {
+                    if (!ShouldCountNote(note))
+                    {
+                        continue;
+                    }
+
+                    count++;
+                    if (logObjects)
+                    {
+                        AnalysisTraceLogger.Write(model, "标注:普通注释", GetObjectName(note, $"普通注释 {count}"), GetNoteTraceDetail(note, viewInfo.View));
+                    }
+                }
+
+                return count;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static bool ShouldCountNote(object note)
+        {
+            object annotation = GetAnnotation(note);
+            if (note == null ||
+                annotation == null ||
+                !IsAnnotationVisible(annotation) ||
+                !IsEditableDrawingNote(annotation, note) ||
+                IsBomBalloon(note))
+            {
+                return false;
+            }
+
+            string propertyLinkedText = GetPropertyLinkedText(note);
+            if (IsPropertyLinkedOrSystemNote(propertyLinkedText))
+            {
+                return false;
+            }
+
+            string text = GetNoteText(note);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            return !IsPropertyLinkedOrSystemNote(text);
+        }
+
+        private static bool IsAnnotationVisible(object value)
+        {
+            try
+            {
+                dynamic dynAnnotation = value;
+                return dynAnnotation.Visible == true;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static object GetAnnotation(object value)
+        {
+            try
+            {
+                dynamic dynValue = value;
+                return dynValue.GetAnnotation();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsEditableDrawingNote(object annotation, object note)
+        {
+            if (!HasEditableDrawingOwner(annotation))
+            {
+                return false;
+            }
+
+            if (IsBehindSheet(note) || IsPositionLocked(note))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool HasEditableDrawingOwner(object annotation)
+        {
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                int ownerType = dynAnnotation.OwnerType;
+                return ownerType == (int)swAnnotationOwner_e.swAnnotationOwner_DrawingView ||
+                    ownerType == (int)swAnnotationOwner_e.swAnnotationOwner_DrawingSheet;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsBehindSheet(object note)
+        {
+            try
+            {
+                dynamic dynNote = note;
+                return dynNote.BehindSheet == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static bool IsPositionLocked(object note)
+        {
+            try
+            {
+                dynamic dynNote = note;
+                return dynNote.LockPosition == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetNoteText(object note)
+        {
+            try
+            {
+                dynamic dynNote = note;
+                string text = dynNote.GetText();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynNote = note;
+                int textCount = dynNote.GetTextCount();
+                var parts = new List<string>();
+                for (int i = 0; i < textCount; i++)
+                {
+                    string text = dynNote.GetTextAtIndex(i);
+                    if (!string.IsNullOrWhiteSpace(text))
+                    {
+                        parts.Add(text);
+                    }
+                }
+
+                return string.Join(" ", parts);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool IsBomBalloon(object note)
+        {
+            try
+            {
+                dynamic dynNote = note;
+                return dynNote.IsBomBalloon() == true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetPropertyLinkedText(object note)
+        {
+            try
+            {
+                dynamic dynNote = note;
+                string text = dynNote.PropertyLinkedText;
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    return text;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynNote = note;
+                string text = dynNote.GetPropertyLinkedText();
+                return text ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static bool IsPropertyLinkedOrSystemNote(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            string normalized = text.Trim();
+            return normalized.StartsWith("$PRP", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("$PRPSHEET", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("$PRPVIEW", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("SW-", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string GetNoteTraceDetail(object note, View view)
+        {
+            object annotation = GetAnnotation(note);
+            return $"{GetViewName(view)}; OwnerType={GetAnnotationOwnerType(annotation)}; Layer={GetAnnotationLayer(annotation)}";
+        }
+
+        private static string GetAnnotationOwnerType(object annotation)
+        {
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                int ownerType = dynAnnotation.OwnerType;
+                return ((swAnnotationOwner_e)ownerType).ToString();
+            }
+            catch
+            {
+                return "Unknown";
+            }
+        }
+
+        private static string GetAnnotationLayer(object annotation)
+        {
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                string layer = dynAnnotation.Layer;
+                return string.IsNullOrWhiteSpace(layer) ? "(none)" : layer;
+            }
+            catch
+            {
+                return "Unknown";
+            }
         }
 
         private static int CountCenterMarksInView(View view)

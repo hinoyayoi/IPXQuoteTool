@@ -34,6 +34,7 @@ namespace IPXQuoteTool
 
         // 处理失败时仍保留报表占位行
         public bool IsProcessingFailed { get; set; }
+        public bool IsProcessingTimedOut { get; set; }
         public string ProcessingError { get; set; }
 
         public string Category => DocumentType switch

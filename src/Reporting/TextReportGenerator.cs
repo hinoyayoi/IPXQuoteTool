@@ -179,9 +179,18 @@ namespace IPXQuoteTool.Reporting
                         AppendInlineCell(sb, $"B{rowIndex}", GetDisplayFileName(reportRow.Document), 3);
                         AppendInlineCell(sb, $"C{rowIndex}", string.Empty, 3);
                         AppendInlineCell(sb, $"D{rowIndex}", reportRow.Document.Category, 3);
-                        AppendInlineCell(sb, $"E{rowIndex}", objectRow.Name, 3);
-                        AppendIntegerCell(sb, $"F{rowIndex}", objectRow.Count, 4);
-                        AppendFormulaNumberCell(sb, $"G{rowIndex}", $"{reportRow.Price.ComplexityScore.ToString("0.00", CultureInfo.InvariantCulture)}*{reportRow.Price.UnitPrice.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.ComplexityCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.DiscountCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}", reportRow.Price.FinalScore, 3);
+                        if (reportRow.Document.IsProcessingFailed)
+                        {
+                            AppendInlineCell(sb, $"E{rowIndex}", string.Empty, 3);
+                            AppendInlineCell(sb, $"F{rowIndex}", string.Empty, 4);
+                            AppendInlineCell(sb, $"G{rowIndex}", string.Empty, 3);
+                        }
+                        else
+                        {
+                            AppendInlineCell(sb, $"E{rowIndex}", objectRow.Name, 3);
+                            AppendIntegerCell(sb, $"F{rowIndex}", objectRow.Count, 4);
+                            AppendFormulaNumberCell(sb, $"G{rowIndex}", $"{reportRow.Price.ComplexityScore.ToString("0.00", CultureInfo.InvariantCulture)}*{reportRow.Price.UnitPrice.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.ComplexityCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}*{reportRow.Price.DiscountCoefficient.ToString("0.####", CultureInfo.InvariantCulture)}", reportRow.Price.FinalScore, 3);
+                        }
                         AppendInlineCell(sb, $"H{rowIndex}", GetDisplayFilePath(reportRow.Document), 3);
                     }
                     else
