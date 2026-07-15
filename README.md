@@ -31,8 +31,10 @@ cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
 生成默认小包版：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\packaging\publish-portable.ps1
+powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1
 ```
+
+不要直接使用 `dotnet publish` 当作发包命令；`dotnet publish` 只会生成程序文件，不会补齐 `启动报价工具.cmd`、启动器脚本、使用说明和压缩包。
 
 生成结果：
 
@@ -68,7 +70,7 @@ winget install --id Microsoft.DotNet.DesktopRuntime.10 --source winget --accept-
 如果希望客户不需要安装 .NET，可以生成自包含版：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\packaging\publish-portable.ps1 -SelfContained
+powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1 -SelfContained
 ```
 
 自包含版包体会明显变大，但客户电脑不需要额外安装 .NET Runtime。

@@ -44,11 +44,15 @@ namespace IPXQuoteTool.Analysis.Assemblies
 
         private static int CountTopLevelComponentFeatures(ModelDoc2 model)
         {
-            var components = GetTopLevelComponentsFromFeatures(model);
+            var components = GetComponentsFromAssemblyDoc(model);
+            if (components.Count == 0)
+            {
+                components = GetTopLevelComponentsFromFeatures(model);
+            }
 
             for (int i = 0; i < components.Count; i++)
             {
-                Component2 component = components[i];
+                IComponent2 component = components[i];
                 AnalysisTraceLogger.Write(
                     model,
                     "组件数",
@@ -59,16 +63,94 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return components.Count;
         }
 
-        private static List<Component2> GetTopLevelComponentsFromFeatures(ModelDoc2 model)
+        private static List<IComponent2> GetComponentsFromAssemblyDoc(ModelDoc2 model)
         {
-            var components = new List<Component2>();
+            var components = new List<IComponent2>();
+
+            try
+            {
+                if (!(model is AssemblyDoc assemblyDoc))
+                {
+                    return components;
+                }
+
+                object rawComponents = assemblyDoc.GetComponents(false);
+                foreach (object rawComponent in EnumerateVariantItems(rawComponents))
+                {
+                    if (rawComponent is IComponent2 component &&
+                        IsTopLevelComponent(component) &&
+                        !IsIgnoredComponent(component))
+                    {
+                        components.Add(component);
+                    }
+                }
+
+                if (components.Count == 0)
+                {
+                    foreach (object rawComponent in EnumerateVariantItems(assemblyDoc.GetComponents(true)))
+                    {
+                        if (rawComponent is IComponent2 component && !IsIgnoredComponent(component))
+                        {
+                            components.Add(component);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return components;
+        }
+
+        private static bool IsTopLevelComponent(IComponent2 component)
+        {
+            try
+            {
+                Component2 parent = component.GetParent();
+                if (parent == null)
+                {
+                    return true;
+                }
+
+                return parent.IsRoot();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static IEnumerable<object> EnumerateVariantItems(object value)
+        {
+            if (value == null)
+            {
+                yield break;
+            }
+
+            if (value is Array array)
+            {
+                foreach (object item in array)
+                {
+                    yield return item;
+                }
+
+                yield break;
+            }
+
+            yield return value;
+        }
+
+        private static List<IComponent2> GetTopLevelComponentsFromFeatures(ModelDoc2 model)
+        {
+            var components = new List<IComponent2>();
 
             try
             {
                 Feature feature = (Feature)model.FirstFeature();
                 while (feature != null)
                 {
-                    Component2 component = TryGetComponentFromFeature(feature);
+                    IComponent2 component = TryGetComponentFromFeature(feature);
                     if (component != null && !IsIgnoredComponentFeature(feature, component))
                     {
                         components.Add(component);
@@ -84,7 +166,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return components;
         }
 
-        private static Component2 TryGetComponentFromFeature(Feature feature)
+        private static IComponent2 TryGetComponentFromFeature(Feature feature)
         {
             if (feature == null)
             {
@@ -93,14 +175,14 @@ namespace IPXQuoteTool.Analysis.Assemblies
 
             try
             {
-                object specificFeature = feature.GetSpecificFeature2() ?? feature.GetSpecificFeature();
-                return specificFeature as Component2;
+                object specificFeature = feature.GetSpecificFeature2();
+                return specificFeature as IComponent2;
             }
             catch
             {
                 try
                 {
-                    return feature.GetSpecificFeature() as Component2;
+                    return feature.GetSpecificFeature() as IComponent2;
                 }
                 catch
                 {
@@ -109,19 +191,8 @@ namespace IPXQuoteTool.Analysis.Assemblies
             }
         }
 
-        private static bool IsIgnoredComponentFeature(Feature feature, Component2 component)
+        private static bool IsIgnoredComponent(IComponent2 component)
         {
-            try
-            {
-                if (feature.IsSuppressed() || component.IsSuppressed())
-                {
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-
             try
             {
                 if (component.IsPatternInstance())
@@ -136,7 +207,23 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return false;
         }
 
-        private static bool IsVirtualComponent(Component2 component)
+        private static bool IsIgnoredComponentFeature(Feature feature, IComponent2 component)
+        {
+            try
+            {
+                if (component.IsPatternInstance())
+                {
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static bool IsVirtualComponent(IComponent2 component)
         {
             try
             {
@@ -148,7 +235,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             }
         }
 
-        private static string SafeComponentPath(Component2 component)
+        private static string SafeComponentPath(IComponent2 component)
         {
             try
             {
@@ -420,8 +507,13 @@ namespace IPXQuoteTool.Analysis.Assemblies
         private static int CountVirtualComponentPartFeatures(ModelDoc2 assemblyModel)
         {
             int count = 0;
+            var components = GetComponentsFromAssemblyDoc(assemblyModel);
+            if (components.Count == 0)
+            {
+                components = GetTopLevelComponentsFromFeatures(assemblyModel);
+            }
 
-            foreach (Component2 component in GetTopLevelComponentsFromFeatures(assemblyModel))
+            foreach (IComponent2 component in components)
             {
                 if (!IsVirtualComponent(component))
                 {
@@ -440,7 +532,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
             return count;
         }
 
-        private static int CountVirtualPartFeatures(ModelDoc2 assemblyModel, Component2 component)
+        private static int CountVirtualPartFeatures(ModelDoc2 assemblyModel, IComponent2 component)
         {
             ModelDoc2 componentModel = GetComponentModel(component);
             if (componentModel == null || (swDocumentTypes_e)componentModel.GetType() != swDocumentTypes_e.swDocPART)
@@ -455,7 +547,7 @@ namespace IPXQuoteTool.Analysis.Assemblies
                 $"虚拟组件零件特征:{AnalysisTraceLogger.GetObjectName(component, "VirtualComponent")}");
         }
 
-        private static ModelDoc2 GetComponentModel(Component2 component)
+        private static ModelDoc2 GetComponentModel(IComponent2 component)
         {
             if (component == null)
             {
