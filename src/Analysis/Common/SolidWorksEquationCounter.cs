@@ -21,13 +21,17 @@ namespace IPXQuoteTool.Analysis
 
                 try
                 {
-                    return (int)equationManager.GetCount();
+                    int count = (int)equationManager.GetCount();
+                    LogEquations(model, equationManager, count);
+                    return count;
                 }
                 catch
                 {
                     try
                     {
-                        return (int)equationManager.Count;
+                        int count = (int)equationManager.Count;
+                        LogEquations(model, equationManager, count);
+                        return count;
                     }
                     catch
                     {
@@ -38,6 +42,23 @@ namespace IPXQuoteTool.Analysis
             catch
             {
                 return 0;
+            }
+        }
+
+        private static void LogEquations(ModelDoc2 model, dynamic equationManager, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                string equationText = $"Equation {i + 1}";
+                try
+                {
+                    equationText = equationManager.Equation[i];
+                }
+                catch
+                {
+                }
+
+                AnalysisTraceLogger.Write(model, "表达式", equationText);
             }
         }
     }

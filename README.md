@@ -1,6 +1,24 @@
 ﻿# IPXQuoteTool
 
-IPX 报价工具，用于读取 SolidWorks 零件、装配体、工程图指标，并根据对象系数和文件类型系数生成报价报表。
+IPX 费用估算，用于读取 SolidWorks 零件、装配体、工程图指标，并根据对象系数和文件类型系数生成费用估算报表。
+
+## 项目结构
+
+```text
+src\UI\                 WPF 界面与窗口代码
+src\Services\           SolidWorks/Document Manager 服务封装
+src\Analysis\           零件、装配体、工程图指标提取逻辑
+src\Pricing\            对象系数、单价、折扣和报价规则
+src\Reporting\          费用估算 xlsx 生成
+src\Settings\           用户路径配置读写
+src\Models\             报价过程使用的数据模型
+resources\Templates\    随软件发布的输入模板，例如对象系数.xlsx
+lib\SolidWorks\         SolidWorks 互操作 DLL
+packaging\              免安装包发布脚本
+artifacts\bin\          编译输出目录
+artifacts\obj\          编译中间产物目录
+artifacts\publish\      免安装发布包输出目录
+```
 
 ## 免安装打包
 
@@ -16,17 +34,19 @@ cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
 powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1
 ```
 
+不要直接使用 `dotnet publish` 当作发包命令；`dotnet publish` 只会生成程序文件，不会补齐 `启动费用估算.cmd`、启动器脚本、使用说明和压缩包。
+
 生成结果：
 
 ```text
-publish\IPXQuoteTool_Portable\
-publish\IPXQuoteTool_Portable.zip
+artifacts\publish\IPXQuoteTool_Portable\
+artifacts\publish\IPXQuoteTool_Portable.zip
 ```
 
 发给客户时，发送这个压缩包：
 
 ```text
-publish\IPXQuoteTool_Portable.zip
+artifacts\publish\IPXQuoteTool_Portable.zip
 ```
 
 ## 客户使用方式
@@ -34,7 +54,7 @@ publish\IPXQuoteTool_Portable.zip
 客户解压整个压缩包后，双击：
 
 ```text
-启动报价工具.cmd
+启动费用估算.cmd
 ```
 
 启动器会检测客户电脑是否安装 `.NET 10 Desktop Runtime x64`。如果未安装，会优先尝试通过 `winget` 自动安装：
@@ -43,7 +63,7 @@ publish\IPXQuoteTool_Portable.zip
 winget install --id Microsoft.DotNet.DesktopRuntime.10 --source winget --accept-package-agreements --accept-source-agreements
 ```
 
-如果自动安装失败，会打开微软官方下载页面。安装完成后，重新双击 `启动报价工具.cmd`。
+如果自动安装失败，会打开微软官方下载页面。安装完成后，重新双击 `启动费用估算.cmd`。
 
 ## 自包含大包
 

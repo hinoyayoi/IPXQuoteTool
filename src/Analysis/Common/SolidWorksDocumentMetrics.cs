@@ -12,6 +12,14 @@ namespace IPXQuoteTool.Analysis
                 object configsObj = model.GetConfigurationNames();
                 if (configsObj is Array configs)
                 {
+                    foreach (object configObj in configs)
+                    {
+                        if (configObj is string configName)
+                        {
+                            AnalysisTraceLogger.Write(model, "配置项", configName);
+                        }
+                    }
+
                     return configs.Length;
                 }
             }

@@ -30,6 +30,131 @@ namespace IPXQuoteTool
 
         public string LastError { get; private set; }
 
+        public static bool TryGetRegistrationMismatch(string swInstallPath, out SolidWorksRegistrationMismatch mismatch, out string error)
+        {
+            mismatch = null;
+            error = null;
+
+            string selectedExePath = GetSelectedSolidWorksExePath(swInstallPath);
+            if (string.IsNullOrEmpty(selectedExePath) || !File.Exists(selectedExePath))
+            {
+                error = $"未找到您选定路径下的 sldworks.exe：{selectedExePath}";
+                return false;
+            }
+
+            if (!TryFindVersionedSolidWorksRegistrationByExecutablePath(selectedExePath, out string selectedProgId, out string selectedClsid))
+            {
+                error =
+                    "未能在 HKEY_CLASSES_ROOT\\SldWorks.Application.* 中找到您选定 SolidWorks 版本对应的 CLSID。\n\n" +
+                    $"选定路径：{selectedExePath}";
+                return false;
+            }
+
+            string defaultExePath = GetDefaultSolidWorksExePath();
+            if (!string.IsNullOrEmpty(defaultExePath) && PathsEqual(selectedExePath, defaultExePath))
+            {
+                return false;
+            }
+
+            mismatch = new SolidWorksRegistrationMismatch(selectedExePath, defaultExePath, selectedProgId, selectedClsid);
+            return true;
+        }
+
+        public static bool SetDefaultSolidWorksClsidWithElevation(string clsid, out string error)
+        {
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(clsid))
+            {
+                error = "目标 CLSID 为空，无法修改系统默认 SolidWorks 版本。";
+                return false;
+            }
+
+            try
+            {
+                string arguments = $"add \"HKCR\\SldWorks.Application\\CLSID\" /ve /d \"{clsid}\" /f /reg:64";
+                var startInfo = new ProcessStartInfo
+                {
+                    FileName = "reg.exe",
+                    Arguments = arguments,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+
+                using Process process = Process.Start(startInfo);
+                if (process == null)
+                {
+                    error = "未能启动注册表修改进程。";
+                    return false;
+                }
+
+                process.WaitForExit();
+                if (process.ExitCode != 0)
+                {
+                    error = $"注册表修改失败，reg.exe 退出码：{process.ExitCode}";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = $"注册表修改失败：{ex.Message}";
+                return false;
+            }
+        }
+
+        public bool IsConnectionAlive()
+        {
+            try
+            {
+                if (_swApp == null)
+                {
+                    return false;
+                }
+
+                _ = _swApp.RevisionNumber();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public void ResetConnection()
+        {
+            _swApp = null;
+        }
+
+        public static void TryTerminateSolidWorksProcesses(string swInstallPath)
+        {
+            string selectedExePath = GetSelectedSolidWorksExePath(swInstallPath);
+            if (string.IsNullOrWhiteSpace(selectedExePath))
+            {
+                return;
+            }
+
+            foreach (Process process in Process.GetProcessesByName("SLDWORKS"))
+            {
+                try
+                {
+                    string processPath = NormalizePath(process.MainModule?.FileName);
+                    if (!PathsEqual(selectedExePath, processPath))
+                    {
+                        continue;
+                    }
+
+                    process.Kill();
+                    process.WaitForExit(15000);
+                }
+                catch
+                {
+                }
+            }
+        }
+
         public bool ConnectOrStart(string swInstallPath, int timeoutSeconds = 60)
         {
             LastError = null;
@@ -38,7 +163,7 @@ namespace IPXQuoteTool
             string selectedExePath = GetSelectedSolidWorksExePath(swInstallPath);
             if (string.IsNullOrEmpty(selectedExePath) || !File.Exists(selectedExePath))
             {
-                LastError = $"未找到您选定路径下的 sldworks.exe：{selectedExePath}";
+                LastError = $"未找到您选定路径下的 sldworks.exe,请确认所选路径是否存在sldworks.exe：{selectedExePath}";
                 return false;
             }
 
@@ -152,9 +277,51 @@ namespace IPXQuoteTool
                 return null;
             }
 
-            string candidate = Path.GetFileName(swInstallPath).Equals("sldworks.exe", StringComparison.OrdinalIgnoreCase)
-                ? swInstallPath
-                : Path.Combine(swInstallPath, "sldworks.exe");
+            string normalizedInput = NormalizePath(swInstallPath);
+            if (File.Exists(normalizedInput) &&
+                Path.GetFileName(normalizedInput).Equals("sldworks.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                return normalizedInput;
+            }
+
+            if (!Directory.Exists(normalizedInput))
+            {
+                return NormalizePath(Path.Combine(normalizedInput, "sldworks.exe"));
+            }
+
+            string candidate = Path.Combine(normalizedInput, "sldworks.exe");
+            if (File.Exists(candidate))
+            {
+                return NormalizePath(candidate);
+            }
+
+            try
+            {
+                string immediateChildMatch = Directory.EnumerateDirectories(normalizedInput)
+                    .Select(directory => Path.Combine(directory, "sldworks.exe"))
+                    .FirstOrDefault(File.Exists);
+                if (!string.IsNullOrWhiteSpace(immediateChildMatch))
+                {
+                    return NormalizePath(immediateChildMatch);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                string recursiveMatch = Directory.EnumerateFiles(normalizedInput, "sldworks.exe", SearchOption.AllDirectories)
+                    .OrderBy(path => path.Length)
+                    .FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(recursiveMatch))
+                {
+                    return NormalizePath(recursiveMatch);
+                }
+            }
+            catch
+            {
+            }
 
             return NormalizePath(candidate);
         }
@@ -415,6 +582,7 @@ namespace IPXQuoteTool
                 if (!File.Exists(filePath))
                 {
                     Debug.WriteLine($"文件不存在: {filePath}");
+                    LastError = $"文件不存在: {filePath}";
                     return null;
                 }
 
@@ -433,6 +601,7 @@ namespace IPXQuoteTool
                 if (docType == swDocumentTypes_e.swDocNONE)
                 {
                     Debug.WriteLine($"不支持的文件类型: {filePath}");
+                    LastError = $"不支持的文件类型: {filePath}";
                     return null;
                 }
 
@@ -451,6 +620,7 @@ namespace IPXQuoteTool
                 if (model == null)
                 {
                     Debug.WriteLine($"打开文件失败: {filePath} (错误码: {errors}, 警告码: {warnings})");
+                    LastError = $"打开文件失败: {Path.GetFileName(filePath)} (错误码: {errors}, 警告码: {warnings})";
                     return null;
                 }
 
@@ -471,8 +641,71 @@ namespace IPXQuoteTool
             {
                 Debug.WriteLine($"处理文件出错 {filePath}: {ex.Message}");
                 Debug.WriteLine($"异常详情: {ex.StackTrace}");
+                LastError = $"处理文件出错 {Path.GetFileName(filePath)}: {ex.Message}";
                 return null;
             }
+        }
+
+        private static bool TryFindVersionedSolidWorksRegistrationByExecutablePath(string selectedExePath, out string progId, out string clsid)
+        {
+            progId = null;
+            clsid = null;
+
+            try
+            {
+                foreach (string versionedProgId in GetVersionedSolidWorksProgIds())
+                {
+                    using RegistryKey progIdKey = Registry.ClassesRoot.OpenSubKey($@"{versionedProgId}\CLSID");
+                    string candidateClsid = progIdKey?.GetValue(null) as string;
+                    if (string.IsNullOrWhiteSpace(candidateClsid))
+                    {
+                        continue;
+                    }
+
+                    using RegistryKey serverKey = Registry.ClassesRoot.OpenSubKey($@"CLSID\{candidateClsid}\LocalServer32");
+                    string serverCommand = serverKey?.GetValue(null) as string;
+                    string serverExePath = NormalizePath(ExtractExecutablePath(serverCommand));
+                    if (PathsEqual(selectedExePath, serverExePath))
+                    {
+                        progId = versionedProgId;
+                        clsid = candidateClsid;
+                        return true;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        private static IEnumerable<string> GetVersionedSolidWorksProgIds()
+        {
+            return Registry.ClassesRoot.GetSubKeyNames()
+                .Where(IsVersionedSolidWorksProgId)
+                .OrderByDescending(GetVersionedSolidWorksProgIdNumber)
+                .ToList();
+        }
+
+        private static bool IsVersionedSolidWorksProgId(string keyName)
+        {
+            const string prefix = "SldWorks.Application.";
+            if (string.IsNullOrWhiteSpace(keyName) ||
+                !keyName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            string suffix = keyName.Substring(prefix.Length);
+            return int.TryParse(suffix, out _);
+        }
+
+        private static int GetVersionedSolidWorksProgIdNumber(string progId)
+        {
+            const string prefix = "SldWorks.Application.";
+            string suffix = progId?.Length > prefix.Length ? progId.Substring(prefix.Length) : string.Empty;
+            return int.TryParse(suffix, out int value) ? value : 0;
         }
 
 
@@ -684,7 +917,7 @@ namespace IPXQuoteTool
                     Directory.CreateDirectory(reportPath);
                 }
 
-                string filePath = Path.Combine(reportPath, $"报价报表_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+                string filePath = Path.Combine(reportPath, $"费用估算_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
                 File.WriteAllBytes(filePath, content);
                 return true;
             }
@@ -694,6 +927,22 @@ namespace IPXQuoteTool
                 return false;
             }
         }
+    }
+
+    public class SolidWorksRegistrationMismatch
+    {
+        public SolidWorksRegistrationMismatch(string selectedExePath, string defaultExePath, string selectedProgId, string selectedClsid)
+        {
+            SelectedExePath = selectedExePath;
+            DefaultExePath = defaultExePath;
+            SelectedProgId = selectedProgId;
+            SelectedClsid = selectedClsid;
+        }
+
+        public string SelectedExePath { get; }
+        public string DefaultExePath { get; }
+        public string SelectedProgId { get; }
+        public string SelectedClsid { get; }
     }
 }
 
