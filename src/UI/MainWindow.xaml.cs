@@ -72,6 +72,7 @@ namespace IPXQuoteTool
             _cancelRequested = true;
             _closeAfterCancel = true;
             btnRun.IsEnabled = false;
+            btnCancel.IsEnabled = false;
             txtProgressText.Text = "正在取消...";
             Log("用户请求取消执行，正在等待当前处理步骤结束...");
         }
@@ -88,7 +89,8 @@ namespace IPXQuoteTool
         private void SetInputControlsEnabled(bool isEnabled)
         {
             pathConfigPanel.IsEnabled = isEnabled;
-            discountPanel.IsEnabled = isEnabled;
+            discountInputPanel.IsEnabled = isEnabled;
+            btnOpenReportPath.IsEnabled = isEnabled;
             chkOfflineMode.IsEnabled = isEnabled;
         }
 
@@ -412,6 +414,7 @@ namespace IPXQuoteTool
             _cancelRequested = false;
             _closeAfterCancel = false;
             btnRun.IsEnabled = false;
+            btnCancel.IsEnabled = true;
             SetInputControlsEnabled(false);
             txtProgressText.Text = "准备中...";
             progressBar.Minimum = 0;
@@ -480,8 +483,20 @@ namespace IPXQuoteTool
 
                 if (result.Cancelled)
                 {
-                    txtProgressText.Text = "已取消";
-                    Log("处理已取消");
+                    txtProgressText.Text = result.ReportSaved ? "已取消，报表已生成" : "已取消，报表保存失败";
+
+                    if (result.ReportSaved)
+                    {
+                        LogSuccess($"已取消计算，已基于当前进度生成报表！共写入 {result.ProcessedCount} 个文件");
+                        LogSuccess($"报表已保存到: {reportPath}");
+                        MessageBox.Show("已取消计算，并已基于当前进度生成报表，请前往报表路径查看结果！");
+                    }
+                    else
+                    {
+                        LogError("已取消计算，但报表保存失败");
+                        MessageBox.Show($"已取消计算。\n已处理 {result.ProcessedCount} 个文件。\n报表保存失败，请检查路径权限。");
+                    }
+
                     return;
                 }
 
@@ -509,6 +524,7 @@ namespace IPXQuoteTool
             finally
             {
                 _isRunning = false;
+                btnCancel.IsEnabled = false;
                 if (!_closeAfterCancel)
                 {
                     btnRun.IsEnabled = true;
@@ -521,6 +537,31 @@ namespace IPXQuoteTool
                     _ = Dispatcher.BeginInvoke(new Action(Close));
                 }
             }
+        }
+
+        private void BtnCancel_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isRunning || _cancelRequested)
+            {
+                return;
+            }
+
+            MessageBoxResult result = MessageBox.Show(
+                this,
+                "当前正在计算中，是否取消计算？\n\n已分析完成的数据会正常写入费用估算表。",
+                "确认取消",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            _cancelRequested = true;
+            btnCancel.IsEnabled = false;
+            txtProgressText.Text = "正在取消...";
+            Log("用户请求取消计算，当前文件处理结束后将生成已完成数据的报表。");
         }
 
         private bool EnsureSolidWorksRegistrationOrExit(string softwarePath)
@@ -637,6 +678,7 @@ namespace IPXQuoteTool
             int partCount = 0;
             int assemblyCount = 0;
             int drawingCount = 0;
+            bool cancelled = false;
             OfflineDocumentManagerService offlineService = null;
 
             if (useOfflineMode)
@@ -654,7 +696,9 @@ namespace IPXQuoteTool
             {
                 if (_cancelRequested)
                 {
-                    return ProcessingResult.CancelledResult(results.Count);
+                    cancelled = true;
+                    Log("检测到取消请求，停止处理后续文件。");
+                    break;
                 }
 
                 string file = files[i];
@@ -725,13 +769,14 @@ namespace IPXQuoteTool
 
             if (_cancelRequested)
             {
-                return ProcessingResult.CancelledResult(results.Count);
+                cancelled = true;
             }
 
-            progress.Report(new DocumentProgressUpdate("生成报表...", files.Count, files.Count, partCount, assemblyCount, drawingCount));
+            string reportProgressText = cancelled ? "生成已完成数据报表..." : "生成报表...";
+            progress.Report(new DocumentProgressUpdate(reportProgressText, results.Count, files.Count, partCount, assemblyCount, drawingCount));
             byte[] reportContent = _swService.GenerateReport(results, pricingSettings);
             bool saveSuccess = _swService.SaveReport(reportPath, reportContent);
-            return new ProcessingResult(results.Count, saveSuccess, false);
+            return new ProcessingResult(results.Count, saveSuccess, cancelled);
         }
 
         private List<string> GetFilesForProcessing(string drawingPath)

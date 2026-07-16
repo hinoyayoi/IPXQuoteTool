@@ -161,8 +161,7 @@ namespace IPXQuoteTool.Analysis.Drawings
             count += CountAndLogObjects(model, view, "标注:基准目标", () => view.GetDatumTargetSyms(), () => view.GetDatumTargetSymCount());
             count += CountAndLogObjects(model, view, "标注:焊接符号", () => view.GetWeldSymbols(), () => view.GetWeldSymbolCount());
             count += CountAndLogObjects(model, view, "标注:几何公差", () => view.GetGTols(), () => view.GetGTolCount());
-            count += CountAndLogObjects(model, view, "标注:中心线", () => view.GetCenterLines(), () => view.GetCenterLineCount());
-            count += CountAndLogObjects(model, view, "标注:中心标记", () => view.GetCenterMarks(), () => CountCenterMarksInView(view));
+            count += CountCenterAnnotationsInView(model, view);
             count += CountAndLogObjects(model, view, "标注:表面粗糙度", () => view.GetSFSymbols(), () => view.GetSFSymbolCount());
             count += CountAndLogObjects(model, view, "标注:修订云线", () => view.GetRevisionClouds(), () => view.GetRevisionCloudCount());
             count += CountAndLogObjects(model, view, "标注:销钉符号", () => view.GetDowelSymbols(), () => view.GetDowelSymbolCount());
@@ -438,11 +437,141 @@ namespace IPXQuoteTool.Analysis.Drawings
             }
         }
 
-        private static int CountCenterMarksInView(View view)
+        private static int CountCenterAnnotationsInView(ModelDoc2 model, View view)
+        {
+            var items = new Dictionary<string, CenterAnnotationInfo>(StringComparer.OrdinalIgnoreCase);
+
+            AddCenterAnnotationsFromAnnotationChain(items, view);
+            AddCenterObjects(items, "标注:中心线", GetCenterLineObjects(view), "View");
+            AddCenterObjects(items, "标注:中心标记", GetCenterMarkObjects(view), "View");
+            AddCenterMarksFromFeatureChain(items, view);
+
+            AddMissingCenterPlaceholders(items, "标注:中心线", SafeCount(() => view.GetCenterLineCount()), "ViewCount");
+            AddMissingCenterPlaceholders(items, "标注:中心标记", CountCenterMarksInView(view), "ViewCount");
+
+            foreach (CenterAnnotationInfo item in items.Values)
+            {
+                AnalysisTraceLogger.Write(model, item.ObjectType, item.ObjectName, $"{GetViewName(view)}; {item.Source}");
+            }
+
+            return items.Count;
+        }
+
+        private static void AddCenterAnnotationsFromAnnotationChain(Dictionary<string, CenterAnnotationInfo> items, View view)
         {
             try
             {
-                return view.GetCenterMarkCount();
+                object annotationObj = GetFirstAnnotation(view);
+                while (annotationObj != null)
+                {
+                    if (IsCenterAnnotation(annotationObj, out string objectType))
+                    {
+                        AddCenterObject(items, objectType, annotationObj, "AnnotationChain");
+                    }
+
+                    annotationObj = GetNextAnnotation(annotationObj);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void AddCenterMarksFromFeatureChain(Dictionary<string, CenterAnnotationInfo> items, View view)
+        {
+            try
+            {
+                object centerMark = GetFirstCenterMark(view);
+                while (centerMark != null)
+                {
+                    AddCenterObject(items, "标注:中心标记", centerMark, "CenterMarkChain");
+                    centerMark = GetNextCenterMark(centerMark);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void AddCenterObjects(Dictionary<string, CenterAnnotationInfo> items, string objectType, IReadOnlyList<object> objects, string source)
+        {
+            foreach (object item in objects)
+            {
+                AddCenterObject(items, objectType, item, source);
+            }
+        }
+
+        private static void AddCenterObject(Dictionary<string, CenterAnnotationInfo> items, string objectType, object value, string source)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            string objectName = GetObjectName(value, null);
+            if (string.IsNullOrWhiteSpace(objectName))
+            {
+                objectName = GetAnnotationName(value);
+            }
+
+            if (string.IsNullOrWhiteSpace(objectName))
+            {
+                objectName = $"{objectType} {GetCenterTypeCount(items, objectType) + 1}";
+            }
+
+            string key = $"{objectType}:{objectName}";
+            if (!items.ContainsKey(key))
+            {
+                items.Add(key, new CenterAnnotationInfo(objectType, objectName, source));
+            }
+        }
+
+        private static void AddMissingCenterPlaceholders(Dictionary<string, CenterAnnotationInfo> items, string objectType, int totalCount, string source)
+        {
+            int existingCount = GetCenterTypeCount(items, objectType);
+            for (int i = existingCount; i < totalCount; i++)
+            {
+                string objectName = $"{objectType} {i + 1}";
+                items[$"{objectType}:{objectName}"] = new CenterAnnotationInfo(objectType, objectName, source);
+            }
+        }
+
+        private static int GetCenterTypeCount(Dictionary<string, CenterAnnotationInfo> items, string objectType)
+        {
+            return items.Values.Count(item => item.ObjectType == objectType);
+        }
+
+        private static int CountCenterAnnotationsFromAnnotationChain(ModelDoc2 model, View view)
+        {
+            int count = 0;
+
+            try
+            {
+                object annotationObj = GetFirstAnnotation(view);
+                while (annotationObj != null)
+                {
+                    if (IsCenterAnnotation(annotationObj, out string objectType))
+                    {
+                        count++;
+                        AnalysisTraceLogger.Write(model, objectType, GetObjectName(annotationObj, $"{objectType} {count}"), $"{GetViewName(view)}; AnnotationChain");
+                    }
+
+                    annotationObj = GetNextAnnotation(annotationObj);
+                }
+            }
+            catch
+            {
+            }
+
+            return count;
+        }
+
+        private static object GetFirstAnnotation(View view)
+        {
+            try
+            {
+                dynamic dynView = view;
+                return dynView.GetFirstAnnotation3();
             }
             catch
             {
@@ -450,13 +579,388 @@ namespace IPXQuoteTool.Analysis.Drawings
 
             try
             {
-                int size = 0;
-                return view.GetCenterMarkCount2(ref size);
+                dynamic dynView = view;
+                return dynView.GetFirstAnnotation2();
             }
             catch
             {
+            }
+
+            try
+            {
+                dynamic dynView = view;
+                return dynView.GetFirstAnnotation();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static object GetNextAnnotation(object annotation)
+        {
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                return dynAnnotation.GetNext3();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                return dynAnnotation.GetNext2();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                return dynAnnotation.GetNext();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static bool IsCenterAnnotation(object annotation, out string objectType)
+        {
+            int annotationType = GetAnnotationType(annotation);
+            if (annotationType == (int)swAnnotationType_e.swCenterLine)
+            {
+                objectType = "标注:中心线";
+                return true;
+            }
+
+            if (annotationType == (int)swAnnotationType_e.swCenterMarkSym)
+            {
+                objectType = "标注:中心标记";
+                return true;
+            }
+
+            object specificAnnotation = GetSpecificAnnotation(annotation);
+            string specificTypeName = specificAnnotation?.GetType().FullName ?? string.Empty;
+            if (specificTypeName.IndexOf("Centerline", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                specificTypeName.IndexOf("CenterLine", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                objectType = "标注:中心线";
+                return true;
+            }
+
+            if (specificTypeName.IndexOf("CenterMark", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                objectType = "标注:中心标记";
+                return true;
+            }
+
+            objectType = null;
+            return false;
+        }
+
+        private static int GetAnnotationType(object annotation)
+        {
+            try
+            {
+                Annotation typedAnnotation = (Annotation)annotation;
+                object type = typedAnnotation.GetType();
+                if (type is int intType)
+                {
+                    return intType;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                object type = dynAnnotation.GetType();
+                if (type is int intType)
+                {
+                    return intType;
+                }
+            }
+            catch
+            {
+            }
+
+            return 0;
+        }
+
+        private static object GetSpecificAnnotation(object annotation)
+        {
+            try
+            {
+                dynamic dynAnnotation = annotation;
+                return dynAnnotation.GetSpecificAnnotation();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static int CountCenterLinesInView(ModelDoc2 model, View view)
+        {
+            int loggedCount = 0;
+            int arrayCount = CountAndLogCenterObjects(model, view, "标注:中心线", GetCenterLineObjects(view), ref loggedCount);
+            int countProviderCount = SafeCount(() => view.GetCenterLineCount());
+
+            int count = Math.Max(arrayCount, countProviderCount);
+            LogMissingCenterObjects(model, view, "标注:中心线", loggedCount, count);
+            return count;
+        }
+
+        private static int CountCenterMarksInView(ModelDoc2 model, View view)
+        {
+            int loggedCount = 0;
+            int arrayCount = CountAndLogCenterObjects(model, view, "标注:中心标记", GetCenterMarkObjects(view), ref loggedCount);
+            int countProviderCount = CountCenterMarksInView(view);
+
+            int count = Math.Max(arrayCount, countProviderCount);
+            LogMissingCenterObjects(model, view, "标注:中心标记", loggedCount, count);
+            return count;
+        }
+
+        private static int CountCenterMarksFromFeatureChain(ModelDoc2 model, View view)
+        {
+            int count = 0;
+
+            try
+            {
+                object centerMark = GetFirstCenterMark(view);
+                while (centerMark != null)
+                {
+                    count++;
+                    AnalysisTraceLogger.Write(model, "标注:中心标记", GetObjectName(centerMark, $"标注:中心标记 {count}"), $"{GetViewName(view)}; CenterMarkChain");
+                    centerMark = GetNextCenterMark(centerMark);
+                }
+            }
+            catch
+            {
+            }
+
+            return count;
+        }
+
+        private static object GetFirstCenterMark(View view)
+        {
+            try
+            {
+                dynamic dynView = view;
+                return dynView.GetFirstCenterMark();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynView = view;
+                return dynView.IGetFirstCenterMark();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static object GetNextCenterMark(object centerMark)
+        {
+            try
+            {
+                dynamic dynCenterMark = centerMark;
+                return dynCenterMark.GetNext();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynCenterMark = centerMark;
+                return dynCenterMark.IGetNext();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static IReadOnlyList<object> GetCenterLineObjects(View view)
+        {
+            var objects = new List<object>();
+            AddObjects(objects, () => view.GetCenterLines());
+            AddObjects(objects, () =>
+            {
+                dynamic dynView = view;
+                return dynView.GetCenterLines2();
+            });
+            return objects;
+        }
+
+        private static IReadOnlyList<object> GetCenterMarkObjects(View view)
+        {
+            var objects = new List<object>();
+            AddObjects(objects, () => view.GetCenterMarks());
+            AddObjects(objects, () =>
+            {
+                dynamic dynView = view;
+                return dynView.GetCenterMarks2();
+            });
+            AddObjects(objects, () =>
+            {
+                dynamic dynView = view;
+                return dynView.GetCenterMarkSymbols();
+            });
+            AddObjects(objects, () =>
+            {
+                dynamic dynView = view;
+                return dynView.GetCenterMarkSymbols2();
+            });
+            return objects;
+        }
+
+        private static void AddObjects(List<object> target, Func<object> objectsProvider)
+        {
+            try
+            {
+                object objectsObj = objectsProvider();
+                if (objectsObj is not Array objects)
+                {
+                    return;
+                }
+
+                foreach (object item in objects)
+                {
+                    if (item != null)
+                    {
+                        target.Add(item);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static int CountAndLogCenterObjects(ModelDoc2 model, View view, string objectType, IReadOnlyList<object> objects, ref int loggedCount)
+        {
+            if (objects.Count == 0)
+            {
                 return 0;
             }
+
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int count = 0;
+
+            foreach (object item in objects)
+            {
+                string key = GetCenterObjectKey(item, count);
+                if (!keys.Add(key))
+                {
+                    continue;
+                }
+
+                count++;
+                loggedCount++;
+                AnalysisTraceLogger.Write(model, objectType, GetObjectName(item, $"{objectType} {count}"), GetViewName(view));
+            }
+
+            return count;
+        }
+
+        private static string GetCenterObjectKey(object value, int index)
+        {
+            string name = GetObjectName(value, null);
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+
+            string annotationName = GetAnnotationName(value);
+            if (!string.IsNullOrWhiteSpace(annotationName))
+            {
+                return annotationName;
+            }
+
+            return $"{value.GetType().FullName}:{index}";
+        }
+
+        private static string GetAnnotationName(object value)
+        {
+            try
+            {
+                dynamic dynValue = value;
+                object annotationObj = dynValue.GetAnnotation();
+                return AnalysisTraceLogger.GetObjectName(annotationObj, null);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void LogMissingCenterObjects(ModelDoc2 model, View view, string objectType, int loggedCount, int totalCount)
+        {
+            for (int i = loggedCount; i < totalCount; i++)
+            {
+                AnalysisTraceLogger.Write(model, objectType, $"{objectType} {i + 1}", GetViewName(view));
+            }
+        }
+
+        private static int CountCenterMarksInView(View view)
+        {
+            try
+            {
+                int count = view.GetCenterMarkCount();
+                if (count >= 0)
+                {
+                    return count;
+                }
+            }
+            catch
+            {
+            }
+
+            int maxCount = 0;
+
+            try
+            {
+                int size = 0;
+                maxCount = Math.Max(maxCount, view.GetCenterMarkCount2(ref size));
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynView = view;
+                int count = dynView.GetCenterMarkSymbolCount();
+                maxCount = Math.Max(maxCount, count);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                dynamic dynView = view;
+                int count = dynView.GetCenterMarkSymbolCount2();
+                maxCount = Math.Max(maxCount, count);
+            }
+            catch
+            {
+            }
+
+            return maxCount;
         }
 
         private static int CountDimensionsInView(View view)
@@ -618,6 +1122,20 @@ namespace IPXQuoteTool.Analysis.Drawings
 
             public View View { get; }
             public bool IsSheetView { get; }
+        }
+
+        private class CenterAnnotationInfo
+        {
+            public CenterAnnotationInfo(string objectType, string objectName, string source)
+            {
+                ObjectType = objectType;
+                ObjectName = objectName;
+                Source = source;
+            }
+
+            public string ObjectType { get; }
+            public string ObjectName { get; }
+            public string Source { get; }
         }
     }
 }

@@ -187,7 +187,7 @@
 
                     <TextBlock Text="折扣系数" Style="{StaticResource HeaderTextStyle}"/>
 
-                    <Grid Grid.Row="1" Margin="0,4,0,52">
+                    <Grid x:Name="discountInputPanel" Grid.Row="1" Margin="0,4,0,52">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
@@ -235,7 +235,8 @@
                     </Grid>
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun" Width="84" Margin="0,0,44,0"/>
+                        <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun" Width="84" Margin="0,0,24,0"/>
+                        <Button x:Name="btnCancel" Content="取消" Style="{StaticResource SecondaryButtonStyle}" Click="BtnCancel_Click" Width="84" Margin="0,0,24,0" IsEnabled="False"/>
                         <Button Content="前往报表路径" Style="{StaticResource PrimaryButtonStyle}" Click="BtnOpenReportPath_Click" x:Name="btnOpenReportPath" Width="116"/>
                     </StackPanel>
                 </Grid>
