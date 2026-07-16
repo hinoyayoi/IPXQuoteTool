@@ -46,6 +46,17 @@
             <Setter Property="Background" Value="#F1F5F9"/>
             <Setter Property="Foreground" Value="#334155"/>
         </Style>
+        <Style x:Key="CancelButtonStyle" TargetType="Button" BasedOn="{StaticResource ToolButtonStyle}">
+            <Setter Property="Background" Value="#2563EB"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Style.Triggers>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter Property="Background" Value="#F1F5F9"/>
+                    <Setter Property="Foreground" Value="#CBD5E1"/>
+                    <Setter Property="Opacity" Value="1"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style x:Key="PathTextBoxStyle" TargetType="TextBox">
             <Setter Property="Height" Value="36"/>
             <Setter Property="Padding" Value="10"/>
@@ -113,7 +124,7 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center"/>
+                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center" Visibility="Collapsed"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -236,7 +247,7 @@
 
                     <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center">
                         <Button Content="▶ 运行" Style="{StaticResource PrimaryButtonStyle}" Click="BtnRun_Click" x:Name="btnRun" Width="84" Margin="0,0,24,0"/>
-                        <Button x:Name="btnCancel" Content="取消" Style="{StaticResource SecondaryButtonStyle}" Click="BtnCancel_Click" Width="84" Margin="0,0,24,0" IsEnabled="False"/>
+                        <Button x:Name="btnCancel" Content="取消" Style="{StaticResource CancelButtonStyle}" Click="BtnCancel_Click" Width="84" Margin="0,0,24,0" IsEnabled="False"/>
                         <Button Content="前往报表路径" Style="{StaticResource PrimaryButtonStyle}" Click="BtnOpenReportPath_Click" x:Name="btnOpenReportPath" Width="116"/>
                     </StackPanel>
                 </Grid>

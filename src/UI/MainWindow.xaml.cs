@@ -19,6 +19,7 @@ namespace IPXQuoteTool
     public partial class MainWindow : Window
     {
         private static readonly TimeSpan DocumentProcessingTimeout = TimeSpan.FromMinutes(5);
+        private static readonly bool OfflineModeEntryEnabled = false;
         private const int DeveloperModeClickThreshold = 7;
         private static readonly TimeSpan DeveloperModeClickWindow = TimeSpan.FromSeconds(3);
         private SolidWorksService _swService;
@@ -238,18 +239,22 @@ namespace IPXQuoteTool
             txtSoftwarePath.Text = settings.SolidWorksPath ?? string.Empty;
             txtDrawingPath.Text = settings.DrawingFolderPath ?? string.Empty;
             txtReportPath.Text = settings.ReportFolderPath ?? string.Empty;
-            chkOfflineMode.IsChecked = settings.UseOfflineDocumentManager;
+            chkOfflineMode.IsChecked = OfflineModeEntryEnabled && settings.UseOfflineDocumentManager;
         }
 
         private void SaveCurrentPaths()
         {
-            _pathSettingsService.Save(new UserPathSettings
+            var settings = _pathSettingsService.Load();
+            settings.SolidWorksPath = txtSoftwarePath.Text;
+            settings.DrawingFolderPath = txtDrawingPath.Text;
+            settings.ReportFolderPath = txtReportPath.Text;
+
+            if (OfflineModeEntryEnabled)
             {
-                SolidWorksPath = txtSoftwarePath.Text,
-                DrawingFolderPath = txtDrawingPath.Text,
-                ReportFolderPath = txtReportPath.Text,
-                UseOfflineDocumentManager = chkOfflineMode.IsChecked == true
-            });
+                settings.UseOfflineDocumentManager = chkOfflineMode.IsChecked == true;
+            }
+
+            _pathSettingsService.Save(settings);
         }
 
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
@@ -426,7 +431,7 @@ namespace IPXQuoteTool
 
             try
             {
-                bool useOfflineMode = chkOfflineMode.IsChecked == true;
+                bool useOfflineMode = OfflineModeEntryEnabled && chkOfflineMode.IsChecked == true;
                 string softwarePath = txtSoftwarePath.Text;
                 string drawingPath = txtDrawingPath.Text;
                 string reportPath = txtReportPath.Text;
