@@ -115,15 +115,18 @@ namespace IPXQuoteTool.Reporting
 
         private static string GetWorksheetXml(IReadOnlyList<ReportDocumentRow> reportRows, int documentCount, double totalComplexityScore, double totalPrice, QuotePricingSettings pricingSettings, List<ReportImage> images)
         {
-            int lastRow = 2 + reportRows.Sum(r => r.ObjectRows.Count);
-            int worksheetLastRow = Math.Max(lastRow, 2);
+            const int summaryRow = 3;
+            const int headerRow = 4;
+            const int firstDataRow = 5;
+            int lastRow = headerRow + reportRows.Sum(r => r.ObjectRows.Count);
+            int worksheetLastRow = Math.Max(lastRow, headerRow);
             var sb = new StringBuilder();
             var merges = new List<string>();
 
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.AppendLine("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
             sb.AppendLine($"  <dimension ref=\"A1:H{worksheetLastRow}\"/>");
-            sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"2\" topLeftCell=\"A3\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
+            sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"4\" topLeftCell=\"A5\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
             sb.AppendLine("  <cols>");
             sb.AppendLine("    <col min=\"1\" max=\"1\" width=\"8\" customWidth=\"1\"/>");
             sb.AppendLine("    <col min=\"2\" max=\"2\" width=\"28\" customWidth=\"1\"/>");
@@ -137,28 +140,36 @@ namespace IPXQuoteTool.Reporting
             sb.AppendLine("  <sheetData>");
 
             sb.AppendLine("    <row r=\"1\" ht=\"42\" customHeight=\"1\">");
-            AppendInlineCell(sb, "A1", "生成\n日期", 1);
-            AppendInlineCell(sb, "B1", DateTime.Now.ToString("yyyy.MM.dd", CultureInfo.InvariantCulture), 1);
-            AppendInlineCell(sb, "C1", "图纸总\n数", 1);
-            AppendIntegerCell(sb, "D1", documentCount, 1);
-            AppendInlineCell(sb, "E1", "等效特\n征数", 1);
-            AppendNumberCell(sb, "F1", totalComplexityScore, 1);
-            AppendInlineCell(sb, "G1", "估算总价\n(元)", 1);
-            AppendFormulaNumberCell(sb, "H1", $"SUM(G3:G{Math.Max(lastRow, 3)})", totalPrice, 1);
+            AppendInlineCell(sb, "A1", "IPX数据转换费用估算表", 5);
             sb.AppendLine("    </row>");
 
-            sb.AppendLine("    <row r=\"2\" ht=\"34\" customHeight=\"1\">");
-            AppendInlineCell(sb, "A2", "序号", 2);
-            AppendInlineCell(sb, "B2", "图纸名", 2);
-            AppendInlineCell(sb, "C2", "示例图", 2);
-            AppendInlineCell(sb, "D2", "类别", 2);
-            AppendInlineCell(sb, "E2", "图纸对象", 2);
-            AppendInlineCell(sb, "F2", "计数", 2);
-            AppendInlineCell(sb, "G2", "估算单价(元)", 2);
-            AppendInlineCell(sb, "H2", "图纸路径", 2);
+            sb.AppendLine("    <row r=\"2\" ht=\"24\" customHeight=\"1\">");
+            AppendInlineCell(sb, "A2", "注意：本表单仅用于费用估算，不代表最终报价及最终价格。", 6);
             sb.AppendLine("    </row>");
 
-            int rowIndex = 3;
+            sb.AppendLine($"    <row r=\"{summaryRow}\" ht=\"42\" customHeight=\"1\">");
+            AppendInlineCell(sb, $"A{summaryRow}", "生成\n日期", 1);
+            AppendInlineCell(sb, $"B{summaryRow}", DateTime.Now.ToString("yyyy.MM.dd", CultureInfo.InvariantCulture), 1);
+            AppendInlineCell(sb, $"C{summaryRow}", "图纸总\n数", 1);
+            AppendIntegerCell(sb, $"D{summaryRow}", documentCount, 1);
+            AppendInlineCell(sb, $"E{summaryRow}", "等效特\n征数", 1);
+            AppendNumberCell(sb, $"F{summaryRow}", totalComplexityScore, 1);
+            AppendInlineCell(sb, $"G{summaryRow}", "估算总价\n(元)", 1);
+            AppendFormulaNumberCell(sb, $"H{summaryRow}", $"SUM(G{firstDataRow}:G{Math.Max(lastRow, firstDataRow)})", totalPrice, 1);
+            sb.AppendLine("    </row>");
+
+            sb.AppendLine($"    <row r=\"{headerRow}\" ht=\"34\" customHeight=\"1\">");
+            AppendInlineCell(sb, $"A{headerRow}", "序号", 2);
+            AppendInlineCell(sb, $"B{headerRow}", "图纸名", 2);
+            AppendInlineCell(sb, $"C{headerRow}", "示例图", 2);
+            AppendInlineCell(sb, $"D{headerRow}", "类别", 2);
+            AppendInlineCell(sb, $"E{headerRow}", "图纸对象", 2);
+            AppendInlineCell(sb, $"F{headerRow}", "计数", 2);
+            AppendInlineCell(sb, $"G{headerRow}", "估算单价(元)", 2);
+            AppendInlineCell(sb, $"H{headerRow}", "图纸路径", 2);
+            sb.AppendLine("    </row>");
+
+            int rowIndex = firstDataRow;
             foreach (ReportDocumentRow reportRow in reportRows)
             {
                 int startRow = rowIndex;
@@ -212,6 +223,9 @@ namespace IPXQuoteTool.Reporting
             }
 
             sb.AppendLine("  </sheetData>");
+
+            merges.Add("A1:H1");
+            merges.Add("A2:H2");
 
             if (merges.Count > 0)
             {
@@ -374,9 +388,11 @@ namespace IPXQuoteTool.Reporting
             return """
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="2">
+  <fonts count="4">
     <font><sz val="11"/><name val="Microsoft YaHei"/></font>
     <font><b/><sz val="11"/><name val="Microsoft YaHei"/></font>
+    <font><b/><sz val="16"/><name val="Microsoft YaHei"/></font>
+    <font><b/><sz val="11"/><color rgb="FFFF0000"/><name val="Microsoft YaHei"/></font>
   </fonts>
   <fills count="3">
     <fill><patternFill patternType="none"/></fill>
@@ -388,12 +404,14 @@ namespace IPXQuoteTool.Reporting
     <border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="5">
+  <cellXfs count="7">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="2" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
     <xf numFmtId="1" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>

@@ -5,7 +5,7 @@
         public double PartDiscount { get; set; } = 1.0;
         public double AssemblyDiscount { get; set; } = 1.0;
         public double DrawingDiscount { get; set; } = 1.0;
-        public double UnitPrice { get; set; } = 0.32;
+        public double UnitPrice { get; set; } = 1.12;
         public ObjectCoefficientSettings ObjectCoefficients { get; set; } = ObjectCoefficientSettings.CreateDefault();
         public ComplexityPricingSettings ComplexityPricing { get; set; } = ComplexityPricingSettings.CreateDefault();
     }
@@ -15,9 +15,9 @@
         public double Range0MaxFeatureCount { get; set; } = 15;
         public double Range1MaxFeatureCount { get; set; } = 40;
         public double Range2MaxFeatureCount { get; set; } = 80;
-        public double Range0To15Coefficient { get; set; } = 0.2;
-        public double Range15To40Coefficient { get; set; } = 0.6;
-        public double Range40To80Coefficient { get; set; } = 0.8;
+        public double Range0To15Coefficient { get; set; } = 1.0;
+        public double Range15To40Coefficient { get; set; } = 1.0;
+        public double Range40To80Coefficient { get; set; } = 1.0;
         public double RangeOver80Coefficient { get; set; } = 1.0;
 
         public static ComplexityPricingSettings CreateDefault()

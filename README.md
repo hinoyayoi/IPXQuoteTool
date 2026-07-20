@@ -15,6 +15,7 @@ src\Models\             报价过程使用的数据模型
 resources\Templates\    随软件发布的输入模板，例如对象系数.xlsx
 lib\SolidWorks\         SolidWorks 互操作 DLL
 packaging\              免安装包发布脚本
+packaging\runtime\      可选：随包携带的 .NET Desktop Runtime 安装程序
 artifacts\bin\          编译输出目录
 artifacts\obj\          编译中间产物目录
 artifacts\publish\      免安装发布包输出目录
@@ -33,6 +34,20 @@ cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1
 ```
+
+如果要让客户在没有网络或没有 `winget` 的环境下也能安装 .NET Runtime，请先把安装包放到：
+
+```text
+packaging\runtime\windowsdesktop-runtime-10.0.10-win-x64.exe
+```
+
+发布脚本会把它复制到：
+
+```text
+IPXQuoteTool_Portable\runtime\windowsdesktop-runtime-10.0.10-win-x64.exe
+```
+
+当前脚本也兼容历史目录名 `packaging\runntime\...`，但推荐后续统一使用 `packaging\runtime`。
 
 不要直接使用 `dotnet publish` 当作发包命令；`dotnet publish` 只会生成程序文件，不会补齐 `启动费用估算.cmd`、启动器脚本、使用说明和压缩包。
 
@@ -57,13 +72,20 @@ artifacts\publish\IPXQuoteTool_Portable.zip
 启动费用估算.cmd
 ```
 
-启动器会检测客户电脑是否安装 `.NET 10 Desktop Runtime x64`。如果未安装，会优先尝试通过 `winget` 自动安装：
+启动器会检测客户电脑是否安装 `.NET 10 Desktop Runtime x64`。
+
+如果未安装，启动器会按顺序处理：
+
+1. 如果发布包内存在 `runtime\windowsdesktop-runtime-10.0.10-win-x64.exe`，提示客户确认后，以管理员权限启动本地安装程序。
+2. 如果发布包内没有 runtime 安装程序，才尝试通过 `winget` 自动安装：
 
 ```powershell
 winget install --id Microsoft.DotNet.DesktopRuntime.10 --source winget --accept-package-agreements --accept-source-agreements
 ```
 
-如果自动安装失败，会打开微软官方下载页面。安装完成后，重新双击 `启动费用估算.cmd`。
+3. 如果自动安装失败，会打开微软官方下载页面。
+
+安装完成后，重新双击 `启动费用估算.cmd`。
 
 ## 自包含大包
 
@@ -81,4 +103,5 @@ powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1 -SelfContained
 - 不要只单独发送 `IPXQuoteTool.exe`。
 - 应发送整个 `IPXQuoteTool_Portable.zip`。
 - `对象系数.xlsx` 必须和 `IPXQuoteTool.exe` 保持在同一目录。
+- 如果使用小包版并希望客户免联网安装 .NET，请确认压缩包内包含 `runtime\windowsdesktop-runtime-10.0.10-win-x64.exe`。
 - 客户电脑仍需具备对应的 SolidWorks/Document Manager 环境，否则无法读取 SolidWorks 文件。

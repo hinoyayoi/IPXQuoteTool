@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:IPXQuoteTool"
         mc:Ignorable="d"
-        Title="IPX费用估算" Height="600" Width="900" MinWidth="700" MinHeight="500"
+        Title="IPX费用估算" Icon="IPXQuotation.ico" Height="600" Width="900" MinWidth="700" MinHeight="500"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style x:Key="CardStyle" TargetType="Border">
@@ -109,7 +109,7 @@
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <Border Background="#1E293B" Padding="16">
+        <Border Background="#1E293B" Padding="16" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -266,7 +266,8 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="运行日志" Style="{StaticResource HeaderTextStyle}" Margin="0"/>
+                        <TextBlock Text="运行日志" Style="{StaticResource HeaderTextStyle}" Margin="0"
+                                   MouseLeftButtonUp="AppTitle_MouseLeftButtonUp"/>
                         <Button Grid.Column="2" Content="清空" Width="60" Height="28" Click="BtnClearLog_Click" 
                                 Background="#F1F5F9" BorderThickness="0" Foreground="#64748B" FontSize="11"/>
                     </Grid>
