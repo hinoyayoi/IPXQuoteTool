@@ -301,8 +301,31 @@ namespace IPXQuoteTool.Reporting
         private static string GetDisplayFileName(DocumentInfo document)
         {
             return document.IsProcessingFailed
-                ? $"{document.FileName}\n处理失败，请补充"
+                ? $"{document.FileName}\n{GetDisplayFailureReason(document)}"
                 : document.FileName;
+        }
+
+        private static string GetDisplayFailureReason(DocumentInfo document)
+        {
+            string error = document.ProcessingError ?? string.Empty;
+            const string reasonMarker = "原因:";
+            int reasonIndex = error.IndexOf(reasonMarker, StringComparison.Ordinal);
+            if (reasonIndex >= 0)
+            {
+                string reason = error.Substring(reasonIndex + reasonMarker.Length).Trim();
+                int codeIndex = reason.IndexOf(" (错误码", StringComparison.Ordinal);
+                if (codeIndex >= 0)
+                {
+                    reason = reason.Substring(0, codeIndex).Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(reason))
+                {
+                    return reason;
+                }
+            }
+
+            return string.IsNullOrWhiteSpace(error) ? "处理失败，请补充" : error;
         }
 
         private static string GetDisplayFilePath(DocumentInfo document)

@@ -102,7 +102,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid Background="#F8FAFC">
+    <Grid Background="#F8FAFC" PreviewMouseDown="RootGrid_PreviewMouseDown">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
@@ -209,6 +209,7 @@
                             <TextBlock Text="零件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
                             <TextBox x:Name="tbPartDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
+                                     KeyDown="Discount_KeyDown"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="PartUp_Click"
@@ -222,6 +223,7 @@
                             <TextBlock Text="装配" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
                             <TextBox x:Name="tbAssemblyDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
+                                     KeyDown="Discount_KeyDown"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="AssemblyUp_Click"
@@ -235,6 +237,7 @@
                             <TextBlock Text="工程图" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
                             <TextBox x:Name="tbDrawingDiscount" Text="1.0"
                                      PreviewTextInput="Discount_PreviewTextInput" LostFocus="Discount_LostFocus"
+                                     KeyDown="Discount_KeyDown"
                                      Style="{StaticResource DiscountTextBoxStyle}"/>
                             <StackPanel Orientation="Vertical" Margin="8,0,0,0">
                                 <Button Content="▲" Width="24" Height="14" Click="DrawingUp_Click"

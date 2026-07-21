@@ -572,7 +572,60 @@ namespace IPXQuoteTool
             string[] extensions = { ".sldprt", ".sldasm", ".slddrw" };
             return Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories)
                 .Where(f => extensions.Contains(Path.GetExtension(f).ToLower()))
+                .Where(f => !IsTemporarySolidWorksFile(f))
                 .ToList();
+        }
+
+        public static bool IsTemporarySolidWorksFile(string filePath)
+        {
+            string fileName = Path.GetFileName(filePath);
+            return !string.IsNullOrEmpty(fileName) && fileName.Contains("~");
+        }
+
+        private static string BuildOpenDocumentFailureMessage(string filePath, int errors, int warnings)
+        {
+            string reason = GetOpenDocumentFailureReason(errors, warnings);
+            return $"打开文件失败: {Path.GetFileName(filePath)}，原因: {reason} (错误码: {errors}, 警告码: {warnings})";
+        }
+
+        private static string GetOpenDocumentFailureReason(int errors, int warnings)
+        {
+            var reasons = new List<string>();
+
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swFutureVersion, "版本不匹配，当前 SolidWorks 版本过低，无法打开更高版本图纸");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swFileNotFoundError, "文件不存在或路径不可访问");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swInvalidFileTypeError, "文件类型无效或文件格式不受支持");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swFileRequiresRepairError, "文件需要修复后才能打开");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swFileCriticalDataRepairError, "文件存在严重数据损坏，需要修复");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swLowResourcesError, "系统资源不足，SolidWorks 无法打开文件");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swApplicationBusy, "SolidWorks 当前繁忙，无法打开文件");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swSharingViolationWarn, "文件被其他程序占用或无访问权限");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swViewOnlyRestrictions, "文件处于仅查看限制状态，无法正常读取");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swNoDisplayData, "文件没有可用显示数据，无法正常读取");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swAddinInteruptError, "SolidWorks 插件中断了文件打开过程");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swConnectedIsOffline, "SolidWorks Connected 当前处于离线状态，无法打开文件");
+            AddFileLoadReason(reasons, errors, swFileLoadError_e.swGenericError, "通用打开错误，可能是文件损坏、权限受限、加密保护或格式异常");
+
+            if (reasons.Count == 0 && warnings != 0)
+            {
+                AddFileLoadReason(reasons, warnings, swFileLoadError_e.swFutureVersion, "版本不匹配，当前 SolidWorks 版本过低，无法打开更高版本图纸");
+                AddFileLoadReason(reasons, warnings, swFileLoadError_e.swReadOnlyWarn, "文件只读");
+                AddFileLoadReason(reasons, warnings, swFileLoadError_e.swFileAlreadyOpenWarn, "文件已经打开");
+                AddFileLoadReason(reasons, warnings, swFileLoadError_e.swFileWithSameTitleAlreadyOpen, "已有同名文件处于打开状态");
+                AddFileLoadReason(reasons, warnings, swFileLoadError_e.swNeedsRegenWarn, "文件需要重建");
+            }
+
+            return reasons.Count > 0
+                ? string.Join("；", reasons)
+                : "无法识别的打开失败原因，请结合错误码和文件本身人工排查";
+        }
+
+        private static void AddFileLoadReason(List<string> reasons, int code, swFileLoadError_e flag, string reason)
+        {
+            if ((code & (int)flag) != 0)
+            {
+                reasons.Add(reason);
+            }
         }
 
         public DocumentInfo ProcessDocument(string filePath)
@@ -620,7 +673,7 @@ namespace IPXQuoteTool
                 if (model == null)
                 {
                     Debug.WriteLine($"打开文件失败: {filePath} (错误码: {errors}, 警告码: {warnings})");
-                    LastError = $"打开文件失败: {Path.GetFileName(filePath)} (错误码: {errors}, 警告码: {warnings})";
+                    LastError = BuildOpenDocumentFailureMessage(filePath, errors, warnings);
                     return null;
                 }
 
