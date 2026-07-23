@@ -8,7 +8,8 @@
     "ipxquote-dev-mcp": "./server.js"
   },
   "scripts": {
-    "start": "node ./server.js"
+    "start": "node ./server.js",
+    "start:http": "node ./http-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.0"

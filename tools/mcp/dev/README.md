@@ -26,6 +26,85 @@ npm start
 
 通常 MCP 客户端会自动启动这个服务，手动启动主要用于冒测试。
 
+## 远程调用版
+
+远程调用版用于组内开发协作：MCP Server 运行在你的电脑上，组员的 AI 客户端通过 URL 调用。所有读取日志、构建、打包、检查发布包等动作都发生在你的电脑上，不会自动操作组员自己的电脑。
+
+完整配置和排障说明见：`远程MCP服务配置技术文档.md`。
+
+### 你的电脑需要配置
+
+1. 启动远程 MCP：
+
+```powershell
+cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+$env:IPX_MCP_HOST="0.0.0.0"
+$env:IPX_MCP_PORT="3001"
+$env:IPX_MCP_TOKEN="换成一段只有组内知道的口令"
+npm.cmd run start:http
+```
+
+如果当前 PowerShell 里还不能直接识别 `npm.cmd`，可以用完整路径：
+
+```powershell
+& "C:\Program Files\nodejs\npm.cmd" run start:http
+```
+
+2. 打开 Windows 防火墙端口：
+
+```powershell
+New-NetFirewallRule -DisplayName "IPX Dev MCP 3001" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3001
+```
+
+3. 查看你的本机 IP：
+
+```powershell
+ipconfig
+```
+
+组员要访问的地址一般是：
+
+```text
+http://你的电脑IP:3001/mcp
+```
+
+健康检查地址是：
+
+```text
+http://你的电脑IP:3001/health
+```
+
+### 组员那边需要配置
+
+如果组员使用的 AI 客户端支持远程 MCP URL，配置类似这样：
+
+```json
+{
+  "mcpServers": {
+    "ipx-dev-team": {
+      "url": "http://你的电脑IP:3001/mcp",
+      "headers": {
+        "Authorization": "Bearer 换成同一段口令"
+      }
+    }
+  }
+}
+```
+
+如果客户端不支持配置请求头，可以把 token 临时放到 URL 上：
+
+```json
+{
+  "mcpServers": {
+    "ipx-dev-team": {
+      "url": "http://你的电脑IP:3001/mcp?token=换成同一段口令"
+    }
+  }
+}
+```
+
+远程版只建议在公司内网或受控网络里使用。不要把这个端口直接暴露到公网。
+
 ## 工具列表
 
 - `ipx.project_summary`

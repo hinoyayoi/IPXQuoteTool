@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -13,7 +12,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = findProjectRoot(path.resolve(__dirname, "../../.."));
 const appDataLogDir = path.join(os.homedir(), "AppData", "Roaming", "IPXQuoteTool");
 
-const server = new Server(
+export function createIpxMcpServer() {
+  const server = new Server(
   {
     name: "ipxquote-dev-mcp",
     version: "0.1.0"
@@ -23,10 +23,10 @@ const server = new Server(
       tools: {}
     }
   }
-);
+  );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [
     {
       name: "ipx.project_summary",
       description: "Return key IPXQuoteTool project paths and development MCP status.",
@@ -118,34 +118,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         additionalProperties: false
       }
     }
-  ]
-}));
+    ]
+  }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const name = request.params.name;
-  const args = request.params.arguments ?? {};
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const name = request.params.name;
+    const args = request.params.arguments ?? {};
 
-  switch (name) {
-    case "ipx.project_summary":
-      return textResult(await projectSummary());
-    case "ipx.build":
-      return textResult(await buildProject(args));
-    case "ipx.publish_portable":
-      return textResult(await publishPortable(args));
-    case "ipx.inspect_portable_zip":
-      return textResult(await inspectPortableZip(args));
-    case "ipx.check_object_coefficients":
-      return textResult(await checkObjectCoefficients());
-    case "ipx.read_recent_trace":
-      return textResult(await readRecentTrace(args));
-    case "ipx.check_duplicate_metrics":
-      return textResult(await checkDuplicateMetrics(args));
-    default:
-      throw new Error(`Unknown tool: ${name}`);
-  }
-});
+    switch (name) {
+      case "ipx.project_summary":
+        return textResult(await projectSummary());
+      case "ipx.build":
+        return textResult(await buildProject(args));
+      case "ipx.publish_portable":
+        return textResult(await publishPortable(args));
+      case "ipx.inspect_portable_zip":
+        return textResult(await inspectPortableZip(args));
+      case "ipx.check_object_coefficients":
+        return textResult(await checkObjectCoefficients());
+      case "ipx.read_recent_trace":
+        return textResult(await readRecentTrace(args));
+      case "ipx.check_duplicate_metrics":
+        return textResult(await checkDuplicateMetrics(args));
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  });
 
-await server.connect(new StdioServerTransport());
+  return server;
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+  await createIpxMcpServer().connect(new StdioServerTransport());
+}
 
 function emptySchema() {
   return {
