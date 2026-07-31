@@ -16,6 +16,11 @@ $coefficientFileName = "对象系数.xlsx"
 $requiredDesktopRuntimeMajor = "10"
 $runtimePackageId = "Microsoft.DotNet.DesktopRuntime.10"
 $runtimeDownloadUrl = "https://dotnet.microsoft.com/en-us/download/dotnet/10.0"
+$runtimeInstallerFileName = "windowsdesktop-runtime-10.0.10-win-x64.exe"
+$runtimeInstallerSourceCandidates = @(
+    (Join-Path $scriptRoot "runtime\$runtimeInstallerFileName"),
+    (Join-Path $scriptRoot "runntime\$runtimeInstallerFileName")
+)
 
 if (!(Test-Path -LiteralPath $projectFile)) {
     throw "Project file was not found: $projectFile"
@@ -56,6 +61,13 @@ if (!(Test-Path -LiteralPath $coefficientFile)) {
     throw "Missing required file in portable folder: $coefficientFileName"
 }
 
+$runtimeInstallerSource = $runtimeInstallerSourceCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (!$selfContainedValue -and ![string]::IsNullOrWhiteSpace($runtimeInstallerSource)) {
+    $portableRuntimeDir = Join-Path $portableDir "runtime"
+    New-Item -ItemType Directory -Path $portableRuntimeDir -Force | Out-Null
+    Copy-Item -LiteralPath $runtimeInstallerSource -Destination (Join-Path $portableRuntimeDir $runtimeInstallerFileName) -Force
+}
+
 $launcherPath = Join-Path $portableDir "启动费用估算.cmd"
 $launcher = @"
 @echo off
@@ -76,6 +88,7 @@ $psLauncher = @"
 `$packageId = "$runtimePackageId"
 `$downloadUrl = "$runtimeDownloadUrl"
 `$appPath = Join-Path `$PSScriptRoot "IPXQuoteTool.exe"
+`$localInstallerPath = Join-Path `$PSScriptRoot "runtime\$runtimeInstallerFileName"
 
 function Test-DesktopRuntimeInstalled {
     try {
@@ -103,7 +116,40 @@ if (Test-DesktopRuntimeInstalled) {
 }
 
 Write-Host "未检测到 .NET `$requiredMajor Desktop Runtime x64。" -ForegroundColor Yellow
-Write-Host "将尝试通过 winget 自动安装：`$packageId"
+Write-Host ""
+
+if (Test-Path -LiteralPath `$localInstallerPath) {
+    Write-Host "已找到随包携带的 .NET Desktop Runtime 安装程序。"
+    `$confirm = Read-Host "是否现在安装 .NET `$requiredMajor Desktop Runtime？请输入 Y 确认"
+    if (`$confirm -notin @("Y", "y")) {
+        Write-Host "已取消安装，无法启动费用估算。" -ForegroundColor Yellow
+        Read-Host "按回车键退出"
+        exit 1
+    }
+
+    try {
+        Write-Host "正在启动 .NET Desktop Runtime 安装程序，请按安装向导提示完成。"
+        `$process = Start-Process -FilePath `$localInstallerPath -ArgumentList "/install", "/passive", "/norestart" -Verb RunAs -Wait -PassThru
+        Write-Host "安装程序已退出，退出码：`$(`$process.ExitCode)"
+    }
+    catch {
+        Write-Host "启动本地 .NET 安装程序失败：`$(`$_.Exception.Message)" -ForegroundColor Red
+    }
+
+    if (Test-DesktopRuntimeInstalled) {
+        Write-Host ""
+        Write-Host ".NET Desktop Runtime 已安装，正在启动费用估算..." -ForegroundColor Green
+        Start-App
+    }
+
+    Write-Host ""
+    Write-Host "未能确认 .NET Desktop Runtime 安装成功。" -ForegroundColor Red
+    Write-Host "请手动运行 runtime 文件夹中的 `$([System.IO.Path]::GetFileName(`$localInstallerPath))，完成安装后重新启动。"
+    Read-Host "按回车键退出"
+    exit 1
+}
+
+Write-Host "未找到随包携带的 .NET 安装程序，将尝试通过 winget 自动安装：`$packageId"
 Write-Host "安装过程中如果弹出权限或协议确认，请选择同意。"
 Write-Host ""
 
@@ -139,7 +185,9 @@ exit 1
 Set-Content -LiteralPath $psLauncherPath -Value $psLauncher -Encoding UTF8
 
 $readmePath = Join-Path $portableDir "免安装使用说明.txt"
-$packageType = if ($selfContainedValue) { "自包含版，已随包携带 .NET 运行时，文件较大。" } else { "小包版，客户电脑需安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime x64；启动器会优先尝试自动安装。" }
+$hasLocalRuntimeInstaller = (!$selfContainedValue -and ![string]::IsNullOrWhiteSpace($runtimeInstallerSource))
+$packageType = if ($selfContainedValue) { "自包含版，已随包携带 .NET 运行时，文件较大。" } elseif ($hasLocalRuntimeInstaller) { "小包版，随包携带 .NET $requiredDesktopRuntimeMajor Desktop Runtime x64 安装程序；启动器会在缺少运行时时提示安装。" } else { "小包版，客户电脑需安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime x64；启动器会优先尝试自动安装。" }
+$runtimeInstallStep = if ($hasLocalRuntimeInstaller) { "3. 如果未安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime，启动器会优先使用 runtime 文件夹内的安装程序。" } else { "3. 如果未安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime，启动器会尝试通过 winget 自动安装。" }
 $readme = @"
 IPX费用估算 - 免安装版
 
@@ -149,7 +197,7 @@ $packageType
 使用方式：
 1. 解压整个文件夹，不要只单独复制 IPXQuoteTool.exe。
 2. 双击“启动费用估算.cmd”运行。
-3. 如果未安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime，启动器会尝试通过 winget 自动安装。
+${runtimeInstallStep}
 4. 安装过程中如果弹出权限或协议确认，请选择同意。
 5. 对象系数.xlsx 必须和 IPXQuoteTool.exe 放在同一目录。
 6. 销售可用 Excel 修改对象系数.xlsx 第三列的系数，保存后重新运行报价即可生效。

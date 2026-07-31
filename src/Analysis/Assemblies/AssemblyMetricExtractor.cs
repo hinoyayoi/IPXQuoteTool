@@ -19,7 +19,6 @@ namespace IPXQuoteTool.Analysis.Assemblies
             "DerivedCirPattern",
             "DerivedLPattern",
             "DerivedHolePattern",
-            "FtrFolder",
             "Chamfer",
             "HoleSeries",
             "Fillet",

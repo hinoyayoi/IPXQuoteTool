@@ -312,6 +312,64 @@ namespace IPXQuoteTool
             FormatAndClamp(sender as System.Windows.Controls.TextBox);
         }
 
+        private void Discount_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+            {
+                return;
+            }
+
+            FormatAndClamp(sender as System.Windows.Controls.TextBox);
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+
+        private void RootGrid_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (Keyboard.FocusedElement is not System.Windows.Controls.TextBox focusedTextBox ||
+                !IsDiscountTextBox(focusedTextBox))
+            {
+                return;
+            }
+
+            if (e.OriginalSource is DependencyObject source && IsTextBoxInside(source))
+            {
+                return;
+            }
+
+            FormatAndClamp(focusedTextBox);
+            Keyboard.ClearFocus();
+        }
+
+        private bool IsDiscountTextBox(System.Windows.Controls.TextBox textBox)
+        {
+            return textBox == tbPartDiscount ||
+                   textBox == tbAssemblyDiscount ||
+                   textBox == tbDrawingDiscount;
+        }
+
+        private static bool IsTextBoxInside(DependencyObject source)
+        {
+            while (source != null)
+            {
+                if (source is System.Windows.Controls.TextBox)
+                {
+                    return true;
+                }
+
+                try
+                {
+                    source = System.Windows.Media.VisualTreeHelper.GetParent(source);
+                }
+                catch (InvalidOperationException)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
         private void FormatAndClamp(System.Windows.Controls.TextBox tb)
         {
             if (tb == null)
@@ -592,7 +650,7 @@ namespace IPXQuoteTool
                 $"从 HKEY_CLASSES_ROOT\\{mismatch.SelectedProgId}\\CLSID 读取数值数据，\n" +
                 "并写入 HKEY_CLASSES_ROOT\\SldWorks.Application\\CLSID。\n" +
                 $"目标 CLSID：{mismatch.SelectedClsid}\n\n" +
-                "是否授权修改？";
+                "是否授权修改？修改后，打开文件的默认版本将会更改为所选定路径的版本";
 
             MessageBoxResult result = MessageBox.Show(
                 this,
@@ -836,6 +894,11 @@ namespace IPXQuoteTool
         private static bool IsSupportedSolidWorksFile(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+            {
+                return false;
+            }
+
+            if (SolidWorksService.IsTemporarySolidWorksFile(filePath))
             {
                 return false;
             }

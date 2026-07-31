@@ -1,0 +1,17 @@
+{
+  "name": "ipxquote-dev-mcp",
+  "version": "0.1.0",
+  "description": "Development MCP server for IPXQuoteTool.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "ipxquote-dev-mcp": "./server.js"
+  },
+  "scripts": {
+    "start": "node ./server.js",
+    "start:http": "node ./http-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0"
+  }
+}

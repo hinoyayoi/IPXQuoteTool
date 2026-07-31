@@ -97,6 +97,11 @@ namespace IPXQuoteTool
                 return false;
             }
 
+            if (SolidWorksService.IsTemporarySolidWorksFile(filePath))
+            {
+                return false;
+            }
+
             string extension = Path.GetExtension(filePath);
             return extension.Equals(".sldprt", StringComparison.OrdinalIgnoreCase) ||
                    extension.Equals(".sldasm", StringComparison.OrdinalIgnoreCase) ||

@@ -119,7 +119,9 @@ namespace IPXQuoteTool.Analysis.Parts
                 return true;
             }
 
-            return IsImportedFeatureName(featureName);
+            return ContainsImportedFeatureText(featureName) ||
+                   ContainsImportedFeatureText(typeName) ||
+                   ContainsImportedFeatureText(typeName2);
         }
 
         private static bool IsStaticFeatureType(string typeName)
@@ -137,18 +139,16 @@ namespace IPXQuoteTool.Analysis.Parts
             return StaticFeatureTypes.Any(t => typeName.Equals(t, System.StringComparison.OrdinalIgnoreCase));
         }
 
-        private static bool IsImportedFeatureName(string featureName)
+        private static bool ContainsImportedFeatureText(string text)
         {
-            if (string.IsNullOrWhiteSpace(featureName))
+            if (string.IsNullOrWhiteSpace(text))
             {
                 return false;
             }
 
-            string normalizedName = featureName.Trim();
-            return normalizedName.StartsWith("Surface-Import", System.StringComparison.OrdinalIgnoreCase) ||
-                   normalizedName.StartsWith("Import", System.StringComparison.OrdinalIgnoreCase) ||
-                   normalizedName.StartsWith("曲面-输入", System.StringComparison.OrdinalIgnoreCase) ||
-                   normalizedName.StartsWith("输入", System.StringComparison.OrdinalIgnoreCase);
+            string normalizedText = text.Trim();
+            return normalizedText.IndexOf("Import", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                   normalizedText.IndexOf("输入", System.StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string GetFeatureTypeName(Feature feature)

@@ -41,7 +41,7 @@ namespace IPXQuoteTool.Pricing
                     break;
             }
 
-            double unitPrice = settings.UnitPrice > 0 ? settings.UnitPrice : 0.32;
+            double unitPrice = settings.UnitPrice > 0 ? settings.UnitPrice : 1.12;
             double complexityCoefficient = (settings.ComplexityPricing ?? ComplexityPricingSettings.CreateDefault()).GetCoefficient(score);
 
             return new QuotePriceResult
