@@ -15,6 +15,12 @@ namespace IPXQuoteTool.Pricing
     {
         public const string FileName = "对象系数.xlsx";
 
+#if DEBUG
+        public static bool IsRuntimePricingEditable => true;
+#else
+        public static bool IsRuntimePricingEditable => false;
+#endif
+
         public static readonly IReadOnlyList<ObjectCoefficientRow> DefaultRows = new List<ObjectCoefficientRow>
         {
             new ObjectCoefficientRow("零件", "特征", 1.00, ""),
@@ -71,7 +77,10 @@ namespace IPXQuoteTool.Pricing
                     }
                 }
 
-                LoadPricingSections(filePath, settings);
+                if (IsRuntimePricingEditable)
+                {
+                    LoadPricingSections(filePath, settings);
+                }
             }
             catch
             {

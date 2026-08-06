@@ -5,7 +5,7 @@
         public double PartDiscount { get; set; } = 1.0;
         public double AssemblyDiscount { get; set; } = 1.0;
         public double DrawingDiscount { get; set; } = 1.0;
-        public double UnitPrice { get; set; } = 1.12;
+        public double UnitPrice { get; set; } = 3.0;
         public ObjectCoefficientSettings ObjectCoefficients { get; set; } = ObjectCoefficientSettings.CreateDefault();
         public ComplexityPricingSettings ComplexityPricing { get; set; } = ComplexityPricingSettings.CreateDefault();
     }

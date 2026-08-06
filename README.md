@@ -103,5 +103,6 @@ powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1 -SelfContained
 - 不要只单独发送 `IPXQuoteTool.exe`。
 - 应发送整个 `IPXQuoteTool_Portable.zip`。
 - `对象系数.xlsx` 必须和 `IPXQuoteTool.exe` 保持在同一目录。
+- Release 包固定使用程序内置单价和复杂度系数；Debug 包才会从 `对象系数.xlsx` 读取单价和复杂度配置。
 - 如果使用小包版并希望客户免联网安装 .NET，请确认压缩包内包含 `runtime\windowsdesktop-runtime-10.0.10-win-x64.exe`。
 - 客户电脑仍需具备对应的 SolidWorks/Document Manager 环境，否则无法读取 SolidWorks 文件。
