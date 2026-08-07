@@ -47,6 +47,7 @@ packaging\runtime\windowsdesktop-runtime-10.0.10-win-x64.exe
 IPXQuoteTool_Portable\runtime\windowsdesktop-runtime-10.0.10-win-x64.exe
 ```
 
+
 当前脚本也兼容历史目录名 `packaging\runntime\...`，但推荐后续统一使用 `packaging\runtime`。
 
 不要直接使用 `dotnet publish` 当作发包命令；`dotnet publish` 只会生成程序文件，不会补齐 `启动费用估算.cmd`、启动器脚本、使用说明和压缩包。
