@@ -1,0 +1,44 @@
+stages:
+  - build
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+      when: always
+    - when: never
+
+build_release:
+  stage: build
+  tags:
+    - windows
+  script:
+    - '$ErrorActionPreference = "Stop"'
+    - '$packageInputDir = Join-Path $env:CI_PROJECT_DIR "bin\Release"'
+    - '$buildOutputDir = Join-Path $env:CI_PROJECT_DIR "artifacts\bin\Release\net10.0-windows"'
+    - '$artifactDir = Join-Path $env:CI_PROJECT_DIR "ci-artifacts"'
+    - '$zipPath = Join-Path $artifactDir "IPXQuoteTool-Release.zip"'
+    - 'foreach ($path in @("bin", "obj", "artifacts", "ci-artifacts")) { $fullPath = Join-Path $env:CI_PROJECT_DIR $path; if (Test-Path -LiteralPath $fullPath) { Remove-Item -LiteralPath $fullPath -Recurse -Force } }'
+    - 'New-Item -ItemType Directory -Path $packageInputDir -Force | Out-Null'
+    - 'if (Test-Path -LiteralPath $artifactDir) { Remove-Item -LiteralPath $artifactDir -Recurse -Force }'
+    - 'New-Item -ItemType Directory -Path $artifactDir -Force | Out-Null'
+    - '$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"'
+    - '$msbuild = if (Test-Path -LiteralPath $vswhere) { & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1 } else { $null }'
+    - 'if (![string]::IsNullOrWhiteSpace($msbuild)) { & $msbuild ".\IPXQuoteTool.csproj" /t:Restore,Build /p:Configuration=Release /p:EnableComHosting=false /m } else { dotnet msbuild ".\IPXQuoteTool.csproj" /t:Restore,Build /p:Configuration=Release /p:EnableComHosting=false /m }'
+    - 'if (!(Test-Path -LiteralPath $buildOutputDir)) { throw "Build output directory was not found: $buildOutputDir" }'
+    - '$files = Get-ChildItem -LiteralPath $buildOutputDir -Recurse -File | Where-Object { $_.Extension -in ".exe", ".dll" }'
+    - 'if ($files.Count -eq 0) { throw "No exe or dll files were found in $buildOutputDir." }'
+    - '$files | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $packageInputDir -Force }'
+    - '$packageFiles = Get-ChildItem -LiteralPath $packageInputDir -File | Where-Object { $_.Extension -in ".exe", ".dll" }'
+    - 'if ($packageFiles.Count -eq 0) { throw "No exe or dll files were copied to $packageInputDir." }'
+    - 'Compress-Archive -Path $packageFiles.FullName -DestinationPath $zipPath -Force'
+    - 'Write-Host "Artifact created: $zipPath"'
+  artifacts:
+    name: "IPXQuoteTool-Release-$CI_COMMIT_SHORT_SHA"
+    when: on_success
+    expire_in: 10 days
+    paths:
+      - ci-artifacts/IPXQuoteTool-Release.zip
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+      when: on_success
+    - when: never
