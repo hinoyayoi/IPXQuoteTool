@@ -26,6 +26,8 @@ if (!(Test-Path -LiteralPath $projectFile)) {
     throw "Project file was not found: $projectFile"
 }
 
+$normalizedConfiguration = if ($Configuration.Equals("Debug", [System.StringComparison]::OrdinalIgnoreCase)) { "Debug" } elseif ($Configuration.Equals("Release", [System.StringComparison]::OrdinalIgnoreCase)) { "Release" } else { throw "Unsupported Configuration: $Configuration. Use Debug or Release." }
+
 if (Test-Path -LiteralPath $portableDir) {
     Remove-Item -LiteralPath $portableDir -Recurse -Force
 }
@@ -40,7 +42,7 @@ $selfContainedValue = $SelfContained.IsPresent
 $publishArgs = @(
     "publish",
     $projectFile,
-    "-c", $Configuration,
+    "-c", $normalizedConfiguration,
     "-r", $Runtime,
     "--self-contained", $selfContainedValue.ToString().ToLowerInvariant(),
     "-p:EnableComHosting=false",
@@ -188,11 +190,31 @@ $readmePath = Join-Path $portableDir "免安装使用说明.txt"
 $hasLocalRuntimeInstaller = (!$selfContainedValue -and ![string]::IsNullOrWhiteSpace($runtimeInstallerSource))
 $packageType = if ($selfContainedValue) { "自包含版，已随包携带 .NET 运行时，文件较大。" } elseif ($hasLocalRuntimeInstaller) { "小包版，随包携带 .NET $requiredDesktopRuntimeMajor Desktop Runtime x64 安装程序；启动器会在缺少运行时时提示安装。" } else { "小包版，客户电脑需安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime x64；启动器会优先尝试自动安装。" }
 $runtimeInstallStep = if ($hasLocalRuntimeInstaller) { "3. 如果未安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime，启动器会优先使用 runtime 文件夹内的安装程序。" } else { "3. 如果未安装 .NET $requiredDesktopRuntimeMajor Desktop Runtime，启动器会尝试通过 winget 自动安装。" }
+$pricingMode = if ($normalizedConfiguration -eq "Debug") { "Debug 版本：对象系数.xlsx 中的对象系数、单价、复杂度系数均会读取，便于开发测试。" } else { "Release 版本：对象系数.xlsx 第三列对象系数会读取；单价和复杂度系数固定使用程序内置值，修改表格中的单价/复杂度不会影响报价。" }
+
+$buildInfoPath = Join-Path $portableDir "build-info.txt"
+$buildInfo = @"
+IPXQuoteTool build info
+
+Configuration: $normalizedConfiguration
+Runtime: $Runtime
+SelfContained: $selfContainedValue
+PricingMode: $pricingMode
+BuiltAt: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+"@
+Set-Content -LiteralPath $buildInfoPath -Value $buildInfo -Encoding UTF8
+
 $readme = @"
 IPX费用估算 - 免安装版
 
 包类型：
 $packageType
+
+构建配置：
+$normalizedConfiguration
+
+计价配置：
+$pricingMode
 
 使用方式：
 1. 解压整个文件夹，不要只单独复制 IPXQuoteTool.exe。
@@ -200,8 +222,9 @@ $packageType
 ${runtimeInstallStep}
 4. 安装过程中如果弹出权限或协议确认，请选择同意。
 5. 对象系数.xlsx 必须和 IPXQuoteTool.exe 放在同一目录。
-6. 销售可用 Excel 修改对象系数.xlsx 第三列的系数，保存后重新运行报价即可生效。
-7. 客户电脑仍需具备对应的 SolidWorks/Document Manager 环境，否则无法读取 SolidWorks 文件。
+6. 销售可用 Excel 修改对象系数.xlsx 第三列的对象系数，保存后重新运行报价即可生效。
+7. Release 版本不允许通过对象系数.xlsx 调整单价和复杂度系数；Debug 版本才会读取这些调试配置。
+8. 客户电脑仍需具备对应的 SolidWorks/Document Manager 环境，否则无法读取 SolidWorks 文件。
 
 .NET 下载页面：
 $runtimeDownloadUrl

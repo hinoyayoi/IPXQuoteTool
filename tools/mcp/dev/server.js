@@ -262,7 +262,8 @@ async function inspectPortableZip(args) {
     "IPXQuoteTool_Portable/启动费用估算.cmd",
     "IPXQuoteTool_Portable/Start-IPXQuoteTool.ps1",
     "IPXQuoteTool_Portable/对象系数.xlsx",
-    "IPXQuoteTool_Portable/免安装使用说明.txt"
+    "IPXQuoteTool_Portable/免安装使用说明.txt",
+    "IPXQuoteTool_Portable/build-info.txt"
   ];
   const runtimeInstaller = "IPXQuoteTool_Portable/runtime/windowsdesktop-runtime-10.0.10-win-x64.exe";
   const missing = required.filter((entry) => !normalized.has(entry));
@@ -302,14 +303,14 @@ async function checkObjectCoefficients() {
     const text = await readFile(file, "utf8");
     codeChecks[key] = {
       file,
-      containsUnitPrice112: text.includes("1.12"),
+      containsUnitPrice3: text.includes("3.0") || text.includes("3.00"),
       containsOldUnitPrice032: text.includes("0.32")
     };
   }
 
   const templateValues = await readCoefficientTemplateValues(files.template);
   const expected = {
-    B15: "1.12",
+    B15: "3.0",
     C19: "1.0",
     C20: "1.0",
     C21: "1.0",
@@ -320,7 +321,7 @@ async function checkObjectCoefficients() {
     .map(([cell, value]) => ({ cell, expected: value, actual: templateValues[cell] ?? null }));
 
   return {
-    ok: mismatches.length === 0 && Object.values(codeChecks).every((check) => check.containsUnitPrice112 && !check.containsOldUnitPrice032),
+    ok: mismatches.length === 0 && Object.values(codeChecks).every((check) => check.containsUnitPrice3 && !check.containsOldUnitPrice032),
     expected,
     template: {
       file: files.template,

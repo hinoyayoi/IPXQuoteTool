@@ -6,7 +6,7 @@ namespace IPXQuoteTool.Pricing
     {
         private readonly Dictionary<string, double> _values = new Dictionary<string, double>();
 
-        public double UnitPrice { get; set; } = 1.12;
+        public double UnitPrice { get; set; } = 3.0;
         public ComplexityPricingSettings ComplexityPricing { get; set; } = ComplexityPricingSettings.CreateDefault();
 
         public double PartFeature => GetValue("零件", "特征", 1);
