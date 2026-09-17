@@ -1,4 +1,4 @@
-﻿# IPXQuoteTool
+# IPXQuoteTool
 
 IPX 费用估算，用于读取 SolidWorks 零件、装配体、工程图指标，并根据对象系数和文件类型系数生成费用估算报表。
 
@@ -26,7 +26,7 @@ artifacts\publish\      免安装发布包输出目录
 在项目根目录打开 PowerShell：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
+cd <repo-root>
 ```
 
 生成默认小包版：

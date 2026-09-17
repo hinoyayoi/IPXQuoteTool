@@ -46,7 +46,7 @@
     <None Include="CreoPlugin.def">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="protk.dat">
+    <None Include="protk.dat.template">
       <Filter>Resource Files</Filter>
     </None>
     <None Include="text\IPXQuoteCreoPlugin.txt">

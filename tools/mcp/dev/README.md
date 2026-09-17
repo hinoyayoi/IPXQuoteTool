@@ -1,4 +1,4 @@
-﻿# IPXQuoteTool 开发版 MCP
+# IPXQuoteTool 开发版 MCP
 
 这是 IPXQuoteTool 的开发辅助 MCP Server。
 
@@ -37,7 +37,7 @@ npm start
 1. 启动远程 MCP：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+cd <repo-root>\tools\mcp\dev
 $env:IPX_MCP_HOST="0.0.0.0"
 $env:IPX_MCP_PORT="3001"
 $env:IPX_MCP_TOKEN="换成一段只有组内知道的口令"
@@ -132,7 +132,7 @@ http://你的电脑IP:3001/health
     "ipx-dev": {
       "command": "node",
       "args": [
-        "C:/Users/GESIC/Desktop/xuhongtao/IPXQuote-mytest/IPXQuotetest/tools/mcp/dev/server.js"
+        "<repo-root>/tools/mcp/dev/server.js"
       ]
     }
   }

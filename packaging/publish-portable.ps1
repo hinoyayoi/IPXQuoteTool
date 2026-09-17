@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     [switch]$SelfContained
@@ -30,6 +30,9 @@ $normalizedConfiguration = if ($Configuration.Equals("Debug", [System.StringComp
 
 $creoPluginDllName = "IPXQuoteCreoPlugin.dll"
 $creoPluginSourceCandidates = @(
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\$normalizedConfiguration\$creoPluginDllName"),
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\Release\$creoPluginDllName"),
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\Debug\$creoPluginDllName"),
     (Join-Path $projectRoot "bridges\CreoPlugin\x64\$normalizedConfiguration\$creoPluginDllName"),
     (Join-Path $projectRoot "bridges\CreoPlugin\x64\Release\$creoPluginDllName"),
     (Join-Path $projectRoot "bridges\CreoPlugin\x64\Debug\$creoPluginDllName")

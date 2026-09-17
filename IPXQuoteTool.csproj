@@ -45,7 +45,7 @@
   </ItemGroup>
   <Target Name="CopyCreoPluginToOutput" AfterTargets="Build">
     <PropertyGroup>
-      <CreoPluginDllPath>$(MSBuildProjectDirectory)\bridges\CreoPlugin\x64\$(Configuration)\IPXQuoteCreoPlugin.dll</CreoPluginDllPath>
+      <CreoPluginDllPath>$(MSBuildProjectDirectory)\artifacts\bin\CreoPlugin\x64\$(Configuration)\IPXQuoteCreoPlugin.dll</CreoPluginDllPath>
       <CreoPluginOutputDirectory>$(OutDir)creo-plugin\</CreoPluginOutputDirectory>
     </PropertyGroup>
     <ItemGroup>
@@ -55,6 +55,6 @@
     <MakeDir Directories="$(CreoPluginOutputDirectory)text\" Condition="Exists('$(CreoPluginDllPath)')" />
     <Copy SourceFiles="$(CreoPluginDllPath)" DestinationFolder="$(CreoPluginOutputDirectory)" SkipUnchangedFiles="true" Condition="Exists('$(CreoPluginDllPath)')" />
     <Copy SourceFiles="@(CreoPluginTextFiles)" DestinationFiles="@(CreoPluginTextFiles->'$(CreoPluginOutputDirectory)text\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="Exists('$(CreoPluginDllPath)')" />
-    <Warning Text="未找到 Creo 插件 DLL：$(CreoPluginDllPath)。如需调试 Creo 报价，请先生成 bridges\CreoPlugin。" Condition="!Exists('$(CreoPluginDllPath)')" />
+    <Warning Text="未找到 Creo 插件 DLL：$(CreoPluginDllPath)。如需调试 Creo 报价，请先生成 bridges\CreoPlugin，输出目录为 artifacts\bin\CreoPlugin。" Condition="!Exists('$(CreoPluginDllPath)')" />
   </Target>
 </Project>

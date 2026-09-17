@@ -1,4 +1,4 @@
-﻿# IPXQuoteTool 开发手册
+# IPXQuoteTool 开发手册
 
 ## 1. 快速开始 (Quick Start)
 
@@ -26,7 +26,7 @@
 项目根目录：
 
 ```text
-C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
+<repo-root>
 ```
 
 首次拉取或拷贝项目后，建议确认以下文件存在：
@@ -43,7 +43,7 @@ lib\SolidWorks\SolidWorks.Interop.swdocumentmgr.dll
 开发版 MCP 依赖安装：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+cd <repo-root>\tools\mcp\dev
 npm.cmd install
 ```
 
@@ -105,7 +105,7 @@ resources\Templates\对象系数.xlsx
 开发构建：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest
+cd <repo-root>
 dotnet build IPXQuoteTool.csproj -c Debug
 ```
 

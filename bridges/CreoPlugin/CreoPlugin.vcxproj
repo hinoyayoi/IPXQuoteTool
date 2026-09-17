@@ -44,13 +44,13 @@
     <CreoToolkitRoot Condition="'$(CreoToolkitRoot)'==''">$(ProjectDir)..\..\lib\Creo\protoolkit</CreoToolkitRoot>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)x64\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)obj\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)..\..\artifacts\bin\CreoPlugin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\..\artifacts\obj\CreoPlugin\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>IPXQuoteCreoPlugin</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(ProjectDir)x64\$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)obj\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(ProjectDir)..\..\artifacts\bin\CreoPlugin\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)..\..\artifacts\obj\CreoPlugin\$(Platform)\$(Configuration)\</IntDir>
     <TargetName>IPXQuoteCreoPlugin</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -100,7 +100,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="CreoPlugin.def" />
-    <None Include="protk.dat" />
+    <None Include="protk.dat.template" />
     <None Include="text\IPXQuoteCreoPlugin.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

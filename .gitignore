@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Local Creo plugin registration generated per developer machine
+/bridges/CreoPlugin/protk.dat
+/bridges/CreoPlugin/protk.dat.local

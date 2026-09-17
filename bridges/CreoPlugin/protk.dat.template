@@ -1,0 +1,6 @@
+name IPXQuoteCreoPlugin
+startup dll
+exec_file {{PLUGIN_DLL}}
+text_dir {{TEXT_DIR}}
+revision 4
+end
