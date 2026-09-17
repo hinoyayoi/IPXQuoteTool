@@ -1,0 +1,4 @@
+LIBRARY "IPXQuoteCreoPlugin"
+EXPORTS
+    user_initialize
+    user_terminate
