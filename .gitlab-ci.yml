@@ -1,0 +1,48 @@
+stages:
+  - build
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+      when: always
+    - when: never
+
+build_release_portable:
+  stage: build
+  tags:
+    - shell
+
+  script:
+    - '$ErrorActionPreference = "Stop"'
+    - 'Write-Host "GitLab CI running on Windows Shell Runner"'
+    - 'Write-Host "Project directory: $env:CI_PROJECT_DIR"'
+
+    - 'foreach ($path in @("bin", "obj", "artifacts", "ci-artifacts")) { $fullPath = Join-Path $env:CI_PROJECT_DIR $path; if (Test-Path -LiteralPath $fullPath) { Write-Host "Cleaning $fullPath"; Remove-Item -LiteralPath $fullPath -Recurse -Force } }'
+
+    - '$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"'
+    - 'if (!(Test-Path -LiteralPath $vswhere)) { throw "vswhere.exe was not found. Please install Visual Studio or Visual Studio Build Tools on the Windows runner." }'
+
+    - '$msbuild = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1'
+    - 'if ([string]::IsNullOrWhiteSpace($msbuild)) { throw "MSBuild.exe was not found. Please install MSBuild workload on the Windows runner." }'
+    - 'Write-Host "MSBuild found: $msbuild"'
+
+    - '& $msbuild ".\IPXQuoteTool.csproj" /t:Restore /p:Configuration=Release /p:EnableComHosting=false /m'
+    - '& $msbuild ".\IPXQuoteTool.csproj" /t:Build /p:Configuration=Release /p:EnableComHosting=false /m'
+
+    - 'powershell -NoProfile -ExecutionPolicy Bypass -File ".\publish-portable.ps1" -Configuration Release'
+
+    - '$zipPath = Join-Path $env:CI_PROJECT_DIR "artifacts\publish\IPXQuoteTool_Portable.zip"'
+    - 'if (!(Test-Path -LiteralPath $zipPath)) { throw "Portable package was not found: $zipPath" }'
+    - 'Write-Host "Portable package created: $zipPath"'
+
+  artifacts:
+    name: "IPXQuoteTool_Portable-$CI_COMMIT_SHORT_SHA"
+    when: on_success
+    expire_in: 10 days
+    paths:
+      - artifacts/publish/IPXQuoteTool_Portable.zip
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "push"'
+      when: on_success
+    - when: never

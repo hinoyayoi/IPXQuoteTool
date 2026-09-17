@@ -19,7 +19,7 @@ namespace IPXQuoteTool
     public partial class MainWindow : Window
     {
         private static readonly TimeSpan DocumentProcessingTimeout = TimeSpan.FromMinutes(5);
-        private static readonly bool OfflineModeEntryEnabled = false;
+        private static readonly bool OfflineModeEntryEnabled = true;
         private const int DeveloperModeClickThreshold = 7;
         private static readonly TimeSpan DeveloperModeClickWindow = TimeSpan.FromSeconds(3);
         private SolidWorksService _swService;
@@ -30,6 +30,8 @@ namespace IPXQuoteTool
         private bool _allowClose;
         private bool _developerSingleFileMode;
         private string _developerSingleFilePath;
+        private bool _isLoadingSavedPaths;
+        private bool _isChangingOfflineMode;
         private int _developerTitleClickCount;
         private DateTime _firstDeveloperTitleClickTime;
         private Progress<DocumentProgressUpdate> _progressReporter;
@@ -238,11 +240,19 @@ namespace IPXQuoteTool
 
         private void LoadSavedPaths()
         {
-            var settings = _pathSettingsService.Load();
-            txtSoftwarePath.Text = settings.SolidWorksPath ?? string.Empty;
-            txtDrawingPath.Text = settings.DrawingFolderPath ?? string.Empty;
-            txtReportPath.Text = settings.ReportFolderPath ?? string.Empty;
-            chkOfflineMode.IsChecked = OfflineModeEntryEnabled && settings.UseOfflineDocumentManager;
+            _isLoadingSavedPaths = true;
+            try
+            {
+                var settings = _pathSettingsService.Load();
+                txtSoftwarePath.Text = settings.SolidWorksPath ?? string.Empty;
+                txtDrawingPath.Text = settings.DrawingFolderPath ?? string.Empty;
+                txtReportPath.Text = settings.ReportFolderPath ?? string.Empty;
+                chkOfflineMode.IsChecked = OfflineModeEntryEnabled && settings.UseOfflineDocumentManager;
+            }
+            finally
+            {
+                _isLoadingSavedPaths = false;
+            }
         }
 
         private void SaveCurrentPaths()
@@ -258,6 +268,140 @@ namespace IPXQuoteTool
             }
 
             _pathSettingsService.Save(settings);
+        }
+
+        private void ChkOfflineMode_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoadingSavedPaths || _isChangingOfflineMode)
+            {
+                return;
+            }
+
+            if (!EnsureDocumentManagerLicenseKeyConfigured())
+            {
+                _isChangingOfflineMode = true;
+                try
+                {
+                    chkOfflineMode.IsChecked = false;
+                }
+                finally
+                {
+                    _isChangingOfflineMode = false;
+                }
+                return;
+            }
+
+            SaveCurrentPaths();
+            Log("离线读取模式已启用，Document Manager License Key 已记录。");
+        }
+
+        private void ChkOfflineMode_Unchecked(object sender, RoutedEventArgs e)
+        {
+            if (_isLoadingSavedPaths || _isChangingOfflineMode)
+            {
+                return;
+            }
+
+            SaveCurrentPaths();
+            Log("离线读取模式已关闭。");
+        }
+
+        private bool EnsureDocumentManagerLicenseKeyConfigured()
+        {
+            var settings = _pathSettingsService.Load();
+            if (!string.IsNullOrWhiteSpace(settings.DocumentManagerLicenseKey))
+            {
+                return true;
+            }
+
+            string licenseKey = PromptForDocumentManagerLicenseKey();
+            if (string.IsNullOrWhiteSpace(licenseKey))
+            {
+                MessageBox.Show(
+                    this,
+                    "未输入 Document Manager License Key，已取消启用离线读取模式。",
+                    "离线读取",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return false;
+            }
+
+            settings.DocumentManagerLicenseKey = licenseKey.Trim();
+            settings.UseOfflineDocumentManager = true;
+            _pathSettingsService.Save(settings);
+            return true;
+        }
+
+        private string PromptForDocumentManagerLicenseKey()
+        {
+            var input = new PasswordBox
+            {
+                Margin = new Thickness(0, 8, 0, 16),
+                MinWidth = 420,
+                Height = 32,
+                VerticalContentAlignment = VerticalAlignment.Center
+            };
+
+            var dialog = new Window
+            {
+                Title = "启用离线读取",
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                SizeToContent = SizeToContent.WidthAndHeight,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false
+            };
+
+            var root = new StackPanel
+            {
+                Margin = new Thickness(18)
+            };
+
+            root.Children.Add(new TextBlock
+            {
+                Text = "请输入 SolidWorks Document Manager License Key：",
+                Foreground = System.Windows.Media.Brushes.Black
+            });
+            root.Children.Add(input);
+
+            var buttons = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right
+            };
+
+            var okButton = new Button
+            {
+                Content = "确定",
+                Width = 80,
+                Height = 30,
+                IsDefault = true,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            var cancelButton = new Button
+            {
+                Content = "取消",
+                Width = 80,
+                Height = 30,
+                IsCancel = true
+            };
+
+            okButton.Click += (_, _) =>
+            {
+                dialog.DialogResult = true;
+            };
+            cancelButton.Click += (_, _) =>
+            {
+                dialog.DialogResult = false;
+            };
+
+            buttons.Children.Add(okButton);
+            buttons.Children.Add(cancelButton);
+            root.Children.Add(buttons);
+            dialog.Content = root;
+            dialog.Loaded += (_, _) => input.Focus();
+
+            return dialog.ShowDialog() == true ? input.Password : null;
         }
 
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
@@ -521,6 +665,11 @@ namespace IPXQuoteTool
                     MessageBox.Show("请选择报表保存路径！");
                     return;
                 }
+                if (useOfflineMode && !EnsureDocumentManagerLicenseKeyConfigured())
+                {
+                    LogError("离线读取模式需要填写 Document Manager License Key！");
+                    return;
+                }
 
                 if (!useOfflineMode && !EnsureSolidWorksRegistrationOrExit(softwarePath))
                 {
@@ -750,6 +899,9 @@ namespace IPXQuoteTool
             if (useOfflineMode)
             {
                 string documentManagerLicenseKey = _pathSettingsService.Load().DocumentManagerLicenseKey;
+                Log(string.IsNullOrWhiteSpace(documentManagerLicenseKey)
+                    ? "Document Manager License Key 未读取到。"
+                    : "Document Manager License Key 已读取。");
                 offlineService = new OfflineDocumentManagerService(documentManagerLicenseKey);
                 if (!offlineService.Initialize())
                 {
