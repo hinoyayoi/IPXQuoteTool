@@ -61,3 +61,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Creo Toolkit SDK link libraries are too large for regular Git blobs
+lib/Creo/protoolkit/x86e_win64/obj/*.lib filter=lfs diff=lfs merge=lfs -text

@@ -364,3 +364,9 @@ FodyWeavers.xsd
 # Local Creo plugin registration generated per developer machine
 /bridges/CreoPlugin/protk.dat
 /bridges/CreoPlugin/protk.dat.local
+# Keep required Creo Toolkit SDK link libraries even though the SDK folder is named obj
+!lib/Creo/protoolkit/x86e_win64/obj/
+/lib/Creo/protoolkit/x86e_win64/obj/*
+!lib/Creo/protoolkit/x86e_win64/obj/protk_dllmd_NU.lib
+!lib/Creo/protoolkit/x86e_win64/obj/ucore.lib
+!lib/Creo/protoolkit/x86e_win64/obj/udata.lib
