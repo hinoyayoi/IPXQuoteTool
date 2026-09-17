@@ -1,0 +1,398 @@
+﻿using SolidWorks.Interop.swdocumentmgr;
+using SolidWorks.Interop.swconst;
+using IPXQuoteTool;
+using IPXQuoteTool.Cad.Common;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+
+namespace IPXQuoteTool.Cad.SolidWorks.Services
+{
+    public class OfflineDocumentManagerService : ICadDocumentService
+    {
+        private readonly string _licenseKey;
+        private SwDMApplication _application;
+
+        public OfflineDocumentManagerService(string licenseKey)
+        {
+            _licenseKey = licenseKey ?? string.Empty;
+        }
+
+        public string LastError { get; private set; }
+
+        public CadSoftwareKind SoftwareKind => CadSoftwareKind.SolidWorks;
+
+        public bool CanProcess(string filePath)
+        {
+            return CadFileTypeDetector.IsSupported(filePath) && !SolidWorksService.IsTemporarySolidWorksFile(filePath);
+        }
+
+        public bool Initialize()
+        {
+            try
+            {
+                Type factoryType = Type.GetTypeFromProgID("SwDocumentMgr.SwDMClassFactory");
+                if (factoryType == null)
+                {
+                    LastError = "未找到 SwDocumentMgr.SwDMClassFactory。请确认 SolidWorks Document Manager 已安装/注册。";
+                    return false;
+                }
+
+                object factoryObj = Activator.CreateInstance(factoryType);
+                var factory = factoryObj as ISwDMClassFactory;
+                if (factory == null)
+                {
+                    LastError = "无法创建 ISwDMClassFactory。";
+                    return false;
+                }
+
+                _application = factory.GetApplication(_licenseKey);
+                if (_application == null)
+                {
+                    LastError = "Document Manager 初始化失败。通常需要有效的 Document Manager license key。";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (COMException ex)
+            {
+                LastError = $"Document Manager COM 初始化失败: {ex.Message}";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                LastError = $"Document Manager 初始化失败: {ex.Message}";
+                return false;
+            }
+        }
+
+        public DocumentInfo ProcessDocument(string filePath)
+        {
+            if (_application == null && !Initialize())
+            {
+                return null;
+            }
+
+            ISwDMDocument29 document = null;
+
+            try
+            {
+                SwDmDocumentType dmDocumentType = GetDocumentManagerType(filePath);
+                if (dmDocumentType == SwDmDocumentType.swDmDocumentUnknown)
+                {
+                    LastError = $"不支持的文件类型: {filePath}";
+                    return null;
+                }
+
+                SwDmDocumentOpenError openError;
+                SwDMDocument rawDocument = _application.GetDocument(filePath, dmDocumentType, true, out openError);
+                document = rawDocument as ISwDMDocument29;
+                if (document == null || openError != SwDmDocumentOpenError.swDmDocumentOpenErrorNone)
+                {
+                    LastError = $"Document Manager 打开失败: {Path.GetFileName(filePath)} ({openError})";
+                    return null;
+                }
+
+                var info = new DocumentInfo
+                {
+                    FileName = Path.GetFileName(filePath),
+                    FilePath = filePath,
+                    DocumentType = GetSolidWorksDocumentType(dmDocumentType),
+                    ConfigurationCount = GetConfigurationCount(document),
+                    PreviewImageBytes = TryGetPreviewImageBytes(document)
+                };
+
+                switch (info.DocumentType)
+                {
+                    case CadDocumentType.Part:
+                        // Document Manager can read metadata, configurations, cut lists, custom properties,
+                        // and DimXpert data, but it does not expose the normal FeatureManager tree.
+                        info.FeatureCount = 0;
+                        break;
+
+                    case CadDocumentType.Assembly:
+                        info.ComponentCount = SafeGetComponentCount(document);
+                        break;
+
+                    case CadDocumentType.Drawing:
+                        FillDrawingMetrics(document, info);
+                        break;
+                }
+
+                return info;
+            }
+            catch (Exception ex)
+            {
+                LastError = $"离线处理失败: {Path.GetFileName(filePath)} - {ex.Message}";
+                return null;
+            }
+            finally
+            {
+                try
+                {
+                    document?.CloseDoc();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private static SwDmDocumentType GetDocumentManagerType(string filePath)
+        {
+            string extension = Path.GetExtension(filePath).ToLowerInvariant();
+            return extension switch
+            {
+                ".sldprt" => SwDmDocumentType.swDmDocumentPart,
+                ".sldasm" => SwDmDocumentType.swDmDocumentAssembly,
+                ".slddrw" => SwDmDocumentType.swDmDocumentDrawing,
+                _ => SwDmDocumentType.swDmDocumentUnknown
+            };
+        }
+
+        private static CadDocumentType GetSolidWorksDocumentType(SwDmDocumentType documentType)
+        {
+            return documentType switch
+            {
+                SwDmDocumentType.swDmDocumentPart => CadDocumentType.Part,
+                SwDmDocumentType.swDmDocumentAssembly => CadDocumentType.Assembly,
+                SwDmDocumentType.swDmDocumentDrawing => CadDocumentType.Drawing,
+                _ => CadDocumentType.Unknown
+            };
+        }
+
+        private static int GetConfigurationCount(ISwDMDocument29 document)
+        {
+            try
+            {
+                SwDMConfigurationMgr configurationManager = document.ConfigurationManager;
+                return configurationManager?.GetConfigurationCount() ?? 0;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static byte[] TryGetPreviewImageBytes(ISwDMDocument29 document)
+        {
+            byte[] documentPreview = TryGetDocumentPreviewImageBytes(document);
+            if (documentPreview?.Length > 0)
+            {
+                return documentPreview;
+            }
+
+            byte[] configurationPreview = TryGetConfigurationPreviewImageBytes(document);
+            if (configurationPreview?.Length > 0)
+            {
+                return configurationPreview;
+            }
+
+            return TryGetDrawingSheetPreviewImageBytes(document);
+        }
+
+        private static byte[] TryGetDocumentPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                if (document is ISwDMDocument11 documentWithPreview)
+                {
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(documentWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 文档预览图不可用: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 文档预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static byte[] TryGetConfigurationPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                SwDMConfigurationMgr configurationManager = document.ConfigurationManager;
+                if (configurationManager == null)
+                {
+                    return null;
+                }
+
+                foreach (string configurationName in GetConfigurationNames(configurationManager))
+                {
+                    SwDMConfiguration configuration = configurationManager.GetConfigurationByName(configurationName);
+                    if (configuration is not ISwDMConfiguration9 configurationWithPreview)
+                    {
+                        continue;
+                    }
+
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(configurationWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 配置预览图不可用: {configurationName}, {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 配置预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static byte[] TryGetDrawingSheetPreviewImageBytes(ISwDMDocument29 document)
+        {
+            try
+            {
+                object sheetsObj = document.GetSheets();
+                if (sheetsObj is not Array sheets)
+                {
+                    return null;
+                }
+
+                foreach (object sheetObj in sheets)
+                {
+                    if (sheetObj is not ISwDMSheet2 sheetWithPreview)
+                    {
+                        continue;
+                    }
+
+                    SwDmPreviewError result = SwDmPreviewError.swDmPreviewErrorNone;
+                    byte[] previewBytes = ConvertVariantByteArray(sheetWithPreview.GetPreviewPNGBitmapBytes(out result));
+                    if (result == SwDmPreviewError.swDmPreviewErrorNone && previewBytes?.Length > 0)
+                    {
+                        return previewBytes;
+                    }
+
+                    Debug.WriteLine($"Document Manager 图纸页预览图不可用: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Document Manager 图纸页预览图读取失败: {ex.Message}");
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> GetConfigurationNames(SwDMConfigurationMgr configurationManager)
+        {
+            object namesObj = configurationManager.GetConfigurationNames();
+            if (namesObj is not Array names)
+            {
+                yield break;
+            }
+
+            foreach (object nameObj in names)
+            {
+                string name = nameObj as string;
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    yield return name;
+                }
+            }
+        }
+
+        private static byte[] ConvertVariantByteArray(object value)
+        {
+            if (value is byte[] bytes)
+            {
+                return bytes;
+            }
+
+            if (value is not Array array || array.Length == 0)
+            {
+                return null;
+            }
+
+            var result = new byte[array.Length];
+            for (int i = 0; i < array.Length; i++)
+            {
+                result[i] = Convert.ToByte(array.GetValue(i));
+            }
+
+            return result;
+        }
+
+        private static int SafeGetComponentCount(ISwDMDocument29 document)
+        {
+            try
+            {
+                return document.GetComponentCount();
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static void FillDrawingMetrics(ISwDMDocument29 document, DocumentInfo info)
+        {
+            try
+            {
+                info.ViewCount = CountArrayItems(document.GetViews());
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                info.TableCount =
+                    CountArrayItems(document.GetTableNames(SwDmTableType.swDmTableTypeRevision)) +
+                    CountArrayItems(document.GetTableNames(SwDmTableType.swDmTableTypeBOM)) +
+                    CountArrayItems(document.GetTableNames(SwDmTableType.swDmTableTypeBOMHidden));
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                info.NoteCount = 0;
+                info.DimensionCount = 0;
+                info.ViewCount = Math.Max(info.ViewCount, CountViewsFromSheets(document));
+            }
+            catch
+            {
+            }
+        }
+
+        private static int CountViewsFromSheets(ISwDMDocument29 document)
+        {
+            int count = 0;
+            object sheetsObj = document.GetSheets();
+            if (sheetsObj is Array sheets)
+            {
+                foreach (object sheetObj in sheets)
+                {
+                    if (sheetObj is ISwDMSheet4 sheet)
+                    {
+                        count += CountArrayItems(sheet.GetViews());
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        private static int CountArrayItems(object value)
+        {
+            return value is Array array ? array.Length : 0;
+        }
+    }
+}

@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
@@ -43,4 +43,18 @@
     <Resource Include="src\UI\IPXQuotation.ico" />
     <None Include="resources\Templates\对象系数.xlsx" Link="对象系数.xlsx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <Target Name="CopyCreoPluginToOutput" AfterTargets="Build">
+    <PropertyGroup>
+      <CreoPluginDllPath>$(MSBuildProjectDirectory)\bridges\CreoPlugin\x64\$(Configuration)\IPXQuoteCreoPlugin.dll</CreoPluginDllPath>
+      <CreoPluginOutputDirectory>$(OutDir)creo-plugin\</CreoPluginOutputDirectory>
+    </PropertyGroup>
+    <ItemGroup>
+      <CreoPluginTextFiles Include="$(MSBuildProjectDirectory)\bridges\CreoPlugin\text\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(CreoPluginOutputDirectory)" Condition="Exists('$(CreoPluginDllPath)')" />
+    <MakeDir Directories="$(CreoPluginOutputDirectory)text\" Condition="Exists('$(CreoPluginDllPath)')" />
+    <Copy SourceFiles="$(CreoPluginDllPath)" DestinationFolder="$(CreoPluginOutputDirectory)" SkipUnchangedFiles="true" Condition="Exists('$(CreoPluginDllPath)')" />
+    <Copy SourceFiles="@(CreoPluginTextFiles)" DestinationFiles="@(CreoPluginTextFiles->'$(CreoPluginOutputDirectory)text\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" Condition="Exists('$(CreoPluginDllPath)')" />
+    <Warning Text="未找到 Creo 插件 DLL：$(CreoPluginDllPath)。如需调试 Creo 报价，请先生成 bridges\CreoPlugin。" Condition="!Exists('$(CreoPluginDllPath)')" />
+  </Target>
 </Project>

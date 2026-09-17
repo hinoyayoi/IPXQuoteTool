@@ -1,4 +1,4 @@
-﻿<Window x:Class="IPXQuoteTool.MainWindow"
+<Window x:Class="IPXQuoteTool.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -123,9 +123,7 @@
                                MouseLeftButtonUp="AppTitle_MouseLeftButtonUp"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center" Visibility="Collapsed"/>
-                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -146,6 +144,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Text="路径配置" Style="{StaticResource HeaderTextStyle}"/>
@@ -154,15 +154,28 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="SolidWorks" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
-                        <TextBox x:Name="txtSoftwarePath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="SolidWorks安装路径" Margin="0,0,8,0"/>
-                        <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseSoftware_Click" ToolTip="选择 SolidWorks 目录" 
-                                Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
+                        <TextBlock Text="选择软件" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
+                        <ComboBox x:Name="cbSoftwareKind" Grid.Column="1" Height="36" Padding="8,0" VerticalContentAlignment="Center"
+                                  SelectionChanged="SoftwareKind_SelectionChanged">
+                            <ComboBoxItem Content="SolidWorks" Tag="SolidWorks" IsSelected="True"/>
+                            <ComboBoxItem Content="Creo" Tag="Creo"/>
+                        </ComboBox>
                     </Grid>
 
                     <Grid Grid.Row="2" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="78"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="软件路径" Style="{StaticResource LabelTextStyle}" Margin="0,0,12,0"/>
+                        <TextBox x:Name="txtSoftwarePath" Style="{StaticResource PathTextBoxStyle}" Grid.Column="1" ToolTip="当前选择软件的安装目录" Margin="0,0,8,0"/>
+                        <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseSoftware_Click" ToolTip="选择软件目录" 
+                                Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
+                    </Grid>
+
+                    <Grid Grid.Row="3" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
@@ -174,7 +187,7 @@
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
 
-                    <Grid Grid.Row="3" Margin="0,0,0,4">
+                    <Grid Grid.Row="4" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
@@ -185,6 +198,12 @@
                         <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseReport_Click" ToolTip="选择报表保存目录" 
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
+
+                    <CheckBox x:Name="chkOfflineMode" Grid.Row="5" Content="离线读取（Document Manager）"
+                              Foreground="#334155" VerticalAlignment="Center" Margin="78,0,0,0"
+                              Checked="ChkOfflineMode_Checked"
+                              Unchecked="ChkOfflineMode_Unchecked"
+                              ToolTip="启用后跳过 SolidWorks 启动，使用 Document Manager 离线读取。"/>
                 </Grid>
             </Border>
 
@@ -318,6 +337,9 @@
         </Border>
     </Grid>
 </Window>
+
+
+
 
 
 

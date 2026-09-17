@@ -1,4 +1,4 @@
-﻿using SolidWorks.Interop.swconst;
+using IPXQuoteTool.Cad.Common;
 
 namespace IPXQuoteTool.Pricing
 {
@@ -9,30 +9,31 @@ namespace IPXQuoteTool.Pricing
             double score;
             double discountCoefficient;
             ObjectCoefficientSettings coefficients = settings.ObjectCoefficients ?? ObjectCoefficientSettings.CreateDefault();
+            CadSoftwareKind softwareKind = settings.SoftwareKind;
 
             switch (document.DocumentType)
             {
-                case swDocumentTypes_e.swDocPART:
+                case CadDocumentType.Part:
                     score =
-                        document.FeatureCount * coefficients.PartFeature +
-                        document.ConfigurationCount * coefficients.PartConfiguration +
-                        document.ExpressionCount * coefficients.PartExpression;
+                        CalculateObjectScore(document.FeatureCount, coefficients, "零件", "特征", coefficients.PartFeature, softwareKind) +
+                        CalculateObjectScore(document.ConfigurationCount, coefficients, "零件", "配置项", coefficients.PartConfiguration, softwareKind) +
+                        CalculateObjectScore(document.ExpressionCount, coefficients, "零件", "表达式", coefficients.PartExpression, softwareKind);
                     discountCoefficient = settings.PartDiscount;
                     break;
-                case swDocumentTypes_e.swDocASSEMBLY:
+                case CadDocumentType.Assembly:
                     score =
-                        document.ComponentCount * coefficients.AssemblyComponent +
-                        document.MateCount * coefficients.AssemblyMate +
-                        document.AssemblyFeatureCount * coefficients.AssemblyFeature +
-                        document.ConfigurationCount * coefficients.AssemblyConfiguration +
-                        document.ExpressionCount * coefficients.AssemblyExpression;
+                        CalculateObjectScore(document.ComponentCount, coefficients, "装配", "组件数", coefficients.AssemblyComponent, softwareKind) +
+                        CalculateObjectScore(document.MateCount, coefficients, "装配", "装配约束", coefficients.AssemblyMate, softwareKind) +
+                        CalculateObjectScore(document.AssemblyFeatureCount, coefficients, "装配", "装配特征", coefficients.AssemblyFeature, softwareKind) +
+                        CalculateObjectScore(document.ConfigurationCount, coefficients, "装配", "配置项", coefficients.AssemblyConfiguration, softwareKind) +
+                        CalculateObjectScore(document.ExpressionCount, coefficients, "装配", "表达式", coefficients.AssemblyExpression, softwareKind);
                     discountCoefficient = settings.AssemblyDiscount;
                     break;
-                case swDocumentTypes_e.swDocDRAWING:
+                case CadDocumentType.Drawing:
                     score =
-                        document.ViewCount * coefficients.DrawingView +
-                        document.DimensionCount * coefficients.DrawingDimension +
-                        document.TableCount * coefficients.DrawingTable;
+                        CalculateObjectScore(document.ViewCount, coefficients, "工程图", "视图", coefficients.DrawingView, softwareKind) +
+                        CalculateObjectScore(document.DimensionCount, coefficients, "工程图", "标注", coefficients.DrawingDimension, softwareKind) +
+                        CalculateObjectScore(document.TableCount, coefficients, "工程图", "表格", coefficients.DrawingTable, softwareKind);
                     discountCoefficient = settings.DrawingDiscount;
                     break;
                 default:
@@ -51,6 +52,11 @@ namespace IPXQuoteTool.Pricing
                 ComplexityCoefficient = complexityCoefficient,
                 DiscountCoefficient = discountCoefficient
             };
+        }
+
+        private static double CalculateObjectScore(int count, ObjectCoefficientSettings coefficients, string category, string objectName, double objectCoefficient, CadSoftwareKind softwareKind)
+        {
+            return count * objectCoefficient * coefficients.GetSoftwareCoefficient(category, objectName, softwareKind);
         }
     }
 }
