@@ -123,9 +123,7 @@
                                MouseLeftButtonUp="AppTitle_MouseLeftButtonUp"/>
                 </StackPanel>
 
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <CheckBox x:Name="chkOfflineMode" Content="离线读取" Foreground="White" VerticalAlignment="Center" Visibility="Collapsed"/>
-                </StackPanel>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"/>
             </Grid>
         </Border>
 
@@ -142,6 +140,7 @@
             <Border x:Name="pathConfigPanel" Grid.Column="0" Grid.Row="0" Style="{StaticResource CardStyle}" Margin="0,0,12,0">
                 <Grid>
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
@@ -174,7 +173,7 @@
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
 
-                    <Grid Grid.Row="3" Margin="0,0,0,4">
+                    <Grid Grid.Row="3" Margin="0,0,0,12">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="78"/>
                             <ColumnDefinition Width="*"/>
@@ -185,6 +184,12 @@
                         <Button Grid.Column="2" Content="📂" Width="36" Height="36" Click="BrowseReport_Click" ToolTip="选择报表保存目录" 
                                 Background="#E2E8F0" BorderThickness="0" Foreground="#475569"/>
                     </Grid>
+
+                    <CheckBox x:Name="chkOfflineMode" Grid.Row="4" Content="离线读取（Document Manager）"
+                              Foreground="#334155" VerticalAlignment="Center" Margin="78,0,0,0"
+                              Checked="ChkOfflineMode_Checked"
+                              Unchecked="ChkOfflineMode_Unchecked"
+                              ToolTip="启用后跳过 SolidWorks 启动，使用 Document Manager 离线读取。"/>
                 </Grid>
             </Border>
 
