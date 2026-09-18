@@ -1,7 +1,10 @@
-﻿namespace IPXQuoteTool.Pricing
+using IPXQuoteTool.Cad.Common;
+
+namespace IPXQuoteTool.Pricing
 {
     public class QuotePricingSettings
     {
+        public CadSoftwareKind SoftwareKind { get; set; } = CadSoftwareKind.SolidWorks;
         public double PartDiscount { get; set; } = 1.0;
         public double AssemblyDiscount { get; set; } = 1.0;
         public double DrawingDiscount { get; set; } = 1.0;

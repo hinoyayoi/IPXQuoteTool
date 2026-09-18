@@ -1,10 +1,12 @@
-﻿using System.Collections.Generic;
+using IPXQuoteTool.Cad.Common;
+using System.Collections.Generic;
 
 namespace IPXQuoteTool.Pricing
 {
     public class ObjectCoefficientSettings
     {
         private readonly Dictionary<string, double> _values = new Dictionary<string, double>();
+        private readonly Dictionary<string, double> _softwareValues = new Dictionary<string, double>();
 
         public double UnitPrice { get; set; } = 3.0;
         public ComplexityPricingSettings ComplexityPricing { get; set; } = ComplexityPricingSettings.CreateDefault();
@@ -29,6 +31,8 @@ namespace IPXQuoteTool.Pricing
             foreach (var row in ObjectCoefficientSettingsService.DefaultRows)
             {
                 settings.SetValue(row.Category, row.ObjectName, row.Coefficient);
+                settings.SetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.SolidWorks, row.SolidWorksSoftwareCoefficient);
+                settings.SetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.Creo, row.CreoSoftwareCoefficient);
             }
 
             return settings;
@@ -39,9 +43,29 @@ namespace IPXQuoteTool.Pricing
             _values[BuildKey(category, objectName)] = coefficient;
         }
 
+        public void SetSoftwareCoefficient(string category, string objectName, CadSoftwareKind softwareKind, double coefficient)
+        {
+            _softwareValues[BuildSoftwareKey(category, objectName, softwareKind)] = coefficient;
+        }
+
         public double GetCoefficient(string category, string objectName, double defaultValue)
         {
             return GetValue(category, objectName, defaultValue);
+        }
+
+        public double GetSoftwareCoefficient(string category, string objectName, CadSoftwareKind softwareKind)
+        {
+            return GetSoftwareCoefficient(category, objectName, softwareKind, 1.0);
+        }
+
+        public double GetSoftwareCoefficient(string category, string objectName, CadSoftwareKind softwareKind, double defaultValue)
+        {
+            if (softwareKind != CadSoftwareKind.SolidWorks && softwareKind != CadSoftwareKind.Creo)
+            {
+                return defaultValue;
+            }
+
+            return _softwareValues.TryGetValue(BuildSoftwareKey(category, objectName, softwareKind), out double value) ? value : defaultValue;
         }
 
         private double GetValue(string category, string objectName, double defaultValue)
@@ -52,6 +76,11 @@ namespace IPXQuoteTool.Pricing
         private static string BuildKey(string category, string objectName)
         {
             return $"{category?.Trim()}|{objectName?.Trim()}";
+        }
+
+        private static string BuildSoftwareKey(string category, string objectName, CadSoftwareKind softwareKind)
+        {
+            return $"{BuildKey(category, objectName)}|{softwareKind}";
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using SolidWorks.Interop.swconst;
+using IPXQuoteTool.Cad.Common;
 using IPXQuoteTool.Pricing;
 using System;
 using System.Collections.Generic;
@@ -39,14 +39,14 @@ namespace IPXQuoteTool.Reporting
 
             switch (document.DocumentType)
             {
-                case swDocumentTypes_e.swDocPART:
+                case CadDocumentType.Part:
                     return new List<ReportObjectRow>
                     {
                         new ReportObjectRow("特征", document.FeatureCount),
                         new ReportObjectRow("配置项", document.ConfigurationCount),
                         new ReportObjectRow("表达式", document.ExpressionCount)
                     };
-                case swDocumentTypes_e.swDocASSEMBLY:
+                case CadDocumentType.Assembly:
                     return new List<ReportObjectRow>
                     {
                         new ReportObjectRow("组件数", document.ComponentCount),
@@ -55,7 +55,7 @@ namespace IPXQuoteTool.Reporting
                         new ReportObjectRow("配置项", document.ConfigurationCount),
                         new ReportObjectRow("表达式", document.ExpressionCount)
                     };
-                case swDocumentTypes_e.swDocDRAWING:
+                case CadDocumentType.Drawing:
                     return new List<ReportObjectRow>
                     {
                         new ReportObjectRow("视图", document.ViewCount),
@@ -507,4 +507,5 @@ namespace IPXQuoteTool.Reporting
         }
     }
 }
+
 

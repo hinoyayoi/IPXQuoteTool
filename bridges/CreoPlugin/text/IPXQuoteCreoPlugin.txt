@@ -1,0 +1,14 @@
+IPXQuote.menu
+IPX Quote
+
+IPXQuoteStartIpcServer.label
+Start IPC Server
+
+IPXQuoteStartIpcServer.help
+Start IPC server for IPXQuoteTool batch processing.
+
+IPXQuoteExportCurrentMetrics.label
+Export Current Metrics
+
+IPXQuoteExportCurrentMetrics.help
+Export current Creo model metrics to JSON.

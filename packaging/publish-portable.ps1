@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$Configuration = "Release",
     [string]$Runtime = "win-x64",
     [switch]$SelfContained
@@ -27,6 +27,17 @@ if (!(Test-Path -LiteralPath $projectFile)) {
 }
 
 $normalizedConfiguration = if ($Configuration.Equals("Debug", [System.StringComparison]::OrdinalIgnoreCase)) { "Debug" } elseif ($Configuration.Equals("Release", [System.StringComparison]::OrdinalIgnoreCase)) { "Release" } else { throw "Unsupported Configuration: $Configuration. Use Debug or Release." }
+
+$creoPluginDllName = "IPXQuoteCreoPlugin.dll"
+$creoPluginSourceCandidates = @(
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\$normalizedConfiguration\$creoPluginDllName"),
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\Release\$creoPluginDllName"),
+    (Join-Path $projectRoot "artifacts\bin\CreoPlugin\x64\Debug\$creoPluginDllName"),
+    (Join-Path $projectRoot "bridges\CreoPlugin\x64\$normalizedConfiguration\$creoPluginDllName"),
+    (Join-Path $projectRoot "bridges\CreoPlugin\x64\Release\$creoPluginDllName"),
+    (Join-Path $projectRoot "bridges\CreoPlugin\x64\Debug\$creoPluginDllName")
+)
+$creoPluginTextSource = Join-Path $projectRoot "bridges\CreoPlugin\text"
 
 if (Test-Path -LiteralPath $portableDir) {
     Remove-Item -LiteralPath $portableDir -Recurse -Force
@@ -69,6 +80,31 @@ if (!$selfContainedValue -and ![string]::IsNullOrWhiteSpace($runtimeInstallerSou
     New-Item -ItemType Directory -Path $portableRuntimeDir -Force | Out-Null
     Copy-Item -LiteralPath $runtimeInstallerSource -Destination (Join-Path $portableRuntimeDir $runtimeInstallerFileName) -Force
 }
+
+$creoPluginSource = $creoPluginSourceCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($creoPluginSource)) {
+    throw "Missing Creo plugin DLL. Please build bridges\CreoPlugin first. Expected: $($creoPluginSourceCandidates -join '; ')"
+}
+
+if (!(Test-Path -LiteralPath $creoPluginTextSource)) {
+    throw "Missing Creo plugin text directory: $creoPluginTextSource"
+}
+
+$portableCreoPluginDir = Join-Path $portableDir "creo-plugin"
+$portableCreoTextDir = Join-Path $portableCreoPluginDir "text"
+New-Item -ItemType Directory -Path $portableCreoPluginDir -Force | Out-Null
+Copy-Item -LiteralPath $creoPluginSource -Destination (Join-Path $portableCreoPluginDir $creoPluginDllName) -Force
+Copy-Item -LiteralPath $creoPluginTextSource -Destination $portableCreoTextDir -Recurse -Force
+
+$protkTemplate = @"
+name IPXQuoteCreoPlugin
+startup dll
+exec_file {{PLUGIN_DLL}}
+text_dir {{TEXT_DIR}}
+revision 4
+end
+"@
+Set-Content -LiteralPath (Join-Path $portableCreoPluginDir "protk.dat.template") -Value $protkTemplate -Encoding ASCII
 
 $launcherPath = Join-Path $portableDir "启动费用估算.cmd"
 $launcher = @"
@@ -184,7 +220,7 @@ Start-Process `$downloadUrl
 Read-Host "按回车键退出"
 exit 1
 "@
-Set-Content -LiteralPath $psLauncherPath -Value $psLauncher -Encoding UTF8
+[System.IO.File]::WriteAllText($psLauncherPath, $psLauncher, [System.Text.UTF8Encoding]::new($true))
 
 $readmePath = Join-Path $portableDir "免安装使用说明.txt"
 $hasLocalRuntimeInstaller = (!$selfContainedValue -and ![string]::IsNullOrWhiteSpace($runtimeInstallerSource))
@@ -225,6 +261,7 @@ ${runtimeInstallStep}
 6. 销售可用 Excel 修改对象系数.xlsx 第三列的对象系数，保存后重新运行报价即可生效。
 7. Release 版本不允许通过对象系数.xlsx 调整单价和复杂度系数；Debug 版本才会读取这些调试配置。
 8. 客户电脑仍需具备对应的 SolidWorks/Document Manager 环境，否则无法读取 SolidWorks 文件。
+9. 使用 Creo 报价时，请在软件路径中选择 Creo 安装目录，例如 ...\\PTC\\Creo 4.0；程序会自动定位版本目录和 Parametric\\bin。首次运行会请求管理员权限写入 protk.dat，以便 Creo 加载随包携带的 IPXQuoteCreoPlugin.dll。
 
 .NET 下载页面：
 $runtimeDownloadUrl

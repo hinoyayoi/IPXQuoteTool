@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,6 +8,7 @@ using System.Security;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using IPXQuoteTool.Cad.Common;
 
 namespace IPXQuoteTool.Pricing
 {
@@ -23,7 +24,7 @@ namespace IPXQuoteTool.Pricing
 
         public static readonly IReadOnlyList<ObjectCoefficientRow> DefaultRows = new List<ObjectCoefficientRow>
         {
-            new ObjectCoefficientRow("零件", "特征", 1.00, ""),
+            new ObjectCoefficientRow("零件", "特征", 1.00, "", 1.00, 1.10),
             new ObjectCoefficientRow("零件", "配置项", 0.50, ""),
             new ObjectCoefficientRow("零件", "表达式", 0.10, ""),
             new ObjectCoefficientRow("装配", "组件数", 0.60, "装配只统计一级子组件；如果子组件为虚拟组件时，需对应拟组件按照零件的逻辑进行统计后，归入装配特征进行计算"),
@@ -75,6 +76,16 @@ namespace IPXQuoteTool.Pricing
                     {
                         settings.SetValue(row.Category, row.ObjectName, coefficient);
                     }
+
+                    if (TryParseCoefficient(row.SolidWorksSoftwareCoefficientText, out double solidWorksSoftwareCoefficient))
+                    {
+                        settings.SetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.SolidWorks, solidWorksSoftwareCoefficient);
+                    }
+
+                    if (TryParseCoefficient(row.CreoSoftwareCoefficientText, out double creoSoftwareCoefficient))
+                    {
+                        settings.SetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.Creo, creoSoftwareCoefficient);
+                    }
                 }
 
                 if (IsRuntimePricingEditable)
@@ -121,9 +132,11 @@ namespace IPXQuoteTool.Pricing
 
                 string objectName = GetCell(cells, 2);
                 string coefficientText = GetCell(cells, 3);
+                string solidWorksSoftwareCoefficientText = GetCell(cells, 4);
+                string creoSoftwareCoefficientText = GetCell(cells, 5);
                 if (!string.IsNullOrWhiteSpace(objectName) && !string.IsNullOrWhiteSpace(coefficientText))
                 {
-                    yield return new WorkbookRow(category, objectName, coefficientText);
+                    yield return new WorkbookRow(category, objectName, coefficientText, solidWorksSoftwareCoefficientText, creoSoftwareCoefficientText);
                 }
             }
         }
@@ -194,7 +207,9 @@ namespace IPXQuoteTool.Pricing
                 Dictionary<string, string> cells = ReadCellMap(filePath);
                 return cells.Values.Any(value => ContainsCellText(value, "单价")) &&
                        cells.Values.Any(value => ContainsCellText(value, "等效特征数范围")) &&
-                       cells.Values.Any(value => ContainsCellText(value, "最大特征数"));
+                       cells.Values.Any(value => ContainsCellText(value, "最大特征数")) &&
+                       cells.Values.Any(value => ContainsCellText(value, "SW软件系数")) &&
+                       cells.Values.Any(value => ContainsCellText(value, "Creo软件系数"));
             }
             catch
             {
@@ -409,15 +424,17 @@ namespace IPXQuoteTool.Pricing
             var sb = new StringBuilder();
             sb.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.AppendLine("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
-            sb.AppendLine("  <dimension ref=\"A1:D22\"/>");
+            sb.AppendLine("  <dimension ref=\"A1:F22\"/>");
             sb.AppendLine("  <sheetViews><sheetView workbookViewId=\"0\"><pane ySplit=\"1\" topLeftCell=\"A2\" activePane=\"bottomLeft\" state=\"frozen\"/></sheetView></sheetViews>");
-            sb.AppendLine("  <cols><col min=\"1\" max=\"1\" width=\"14\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"18\" customWidth=\"1\"/><col min=\"3\" max=\"3\" width=\"42\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"72\" customWidth=\"1\"/></cols>");
+            sb.AppendLine("  <cols><col min=\"1\" max=\"1\" width=\"14\" customWidth=\"1\"/><col min=\"2\" max=\"2\" width=\"18\" customWidth=\"1\"/><col min=\"3\" max=\"3\" width=\"42\" customWidth=\"1\"/><col min=\"4\" max=\"4\" width=\"14\" customWidth=\"1\"/><col min=\"5\" max=\"5\" width=\"14\" customWidth=\"1\"/><col min=\"6\" max=\"6\" width=\"72\" customWidth=\"1\"/></cols>");
             sb.AppendLine("  <sheetData>");
             sb.AppendLine("    <row r=\"1\">");
             AppendInlineCell(sb, "A1", "类别", 1);
             AppendInlineCell(sb, "B1", "图纸对象", 1);
             AppendInlineCell(sb, "C1", "图纸对象系数(表中为默认值，可配置，要求数值非负)", 1);
-            AppendInlineCell(sb, "D1", "备注", 1);
+            AppendInlineCell(sb, "D1", "SW软件系数", 1);
+            AppendInlineCell(sb, "E1", "Creo软件系数", 1);
+            AppendInlineCell(sb, "F1", "备注", 1);
             sb.AppendLine("    </row>");
 
             for (int i = 0; i < DefaultRows.Count; i++)
@@ -428,7 +445,9 @@ namespace IPXQuoteTool.Pricing
                 AppendInlineCell(sb, $"A{rowIndex}", row.Category, 0);
                 AppendInlineCell(sb, $"B{rowIndex}", row.ObjectName, 0);
                 AppendNumberCell(sb, $"C{rowIndex}", settings.GetCoefficient(row.Category, row.ObjectName, row.Coefficient));
-                AppendInlineCell(sb, $"D{rowIndex}", row.Remark, 0);
+                AppendNumberCell(sb, $"D{rowIndex}", settings.GetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.SolidWorks, row.SolidWorksSoftwareCoefficient));
+                AppendNumberCell(sb, $"E{rowIndex}", settings.GetSoftwareCoefficient(row.Category, row.ObjectName, CadSoftwareKind.Creo, row.CreoSoftwareCoefficient));
+                AppendInlineCell(sb, $"F{rowIndex}", row.Remark, 0);
                 sb.AppendLine("    </row>");
             }
 
@@ -446,7 +465,7 @@ namespace IPXQuoteTool.Pricing
             AppendInlineCell(sb, "A18", "等效特征数范围", 1);
             AppendInlineCell(sb, "B18", "最大特征数", 1);
             AppendInlineCell(sb, "C18", "复杂度系数", 1);
-            AppendInlineCell(sb, "D18", "备注", 1);
+            AppendInlineCell(sb, "F18", "备注", 1);
             sb.AppendLine("    </row>");
 
             AppendComplexityRow(sb, 19, BuildRangeLabel(0, settings.ComplexityPricing.Range0MaxFeatureCount), settings.ComplexityPricing.Range0MaxFeatureCount, settings.ComplexityPricing.Range0To15Coefficient, $"含{FormatReferenceNumber(settings.ComplexityPricing.Range0MaxFeatureCount)}");
@@ -465,7 +484,7 @@ namespace IPXQuoteTool.Pricing
             AppendInlineCell(sb, $"A{rowIndex}", range, 0);
             AppendNumberCell(sb, $"B{rowIndex}", maxFeatureCount);
             AppendNumberCell(sb, $"C{rowIndex}", coefficient);
-            AppendInlineCell(sb, $"D{rowIndex}", remark, 0);
+            AppendInlineCell(sb, $"F{rowIndex}", remark, 0);
             sb.AppendLine("    </row>");
         }
 
@@ -475,7 +494,7 @@ namespace IPXQuoteTool.Pricing
             AppendInlineCell(sb, $"A{rowIndex}", $"{FormatReferenceNumber(previousMaxFeatureCount)}以上", 0);
             AppendInlineCell(sb, $"B{rowIndex}", string.Empty, 0);
             AppendNumberCell(sb, $"C{rowIndex}", coefficient);
-            AppendInlineCell(sb, $"D{rowIndex}", string.Empty, 0);
+            AppendInlineCell(sb, $"F{rowIndex}", string.Empty, 0);
             sb.AppendLine("    </row>");
         }
 
@@ -531,32 +550,41 @@ namespace IPXQuoteTool.Pricing
 
         private class WorkbookRow
         {
-            public WorkbookRow(string category, string objectName, string coefficientText)
+            public WorkbookRow(string category, string objectName, string coefficientText, string solidWorksSoftwareCoefficientText, string creoSoftwareCoefficientText)
             {
                 Category = category;
                 ObjectName = objectName;
                 CoefficientText = coefficientText;
+                SolidWorksSoftwareCoefficientText = solidWorksSoftwareCoefficientText;
+                CreoSoftwareCoefficientText = creoSoftwareCoefficientText;
             }
 
             public string Category { get; }
             public string ObjectName { get; }
             public string CoefficientText { get; }
+            public string SolidWorksSoftwareCoefficientText { get; }
+            public string CreoSoftwareCoefficientText { get; }
         }
     }
 
     public class ObjectCoefficientRow
     {
-        public ObjectCoefficientRow(string category, string objectName, double coefficient, string remark)
+        public ObjectCoefficientRow(string category, string objectName, double coefficient, string remark, double solidWorksSoftwareCoefficient = 1.0, double creoSoftwareCoefficient = 1.0)
         {
             Category = category;
             ObjectName = objectName;
             Coefficient = coefficient;
             Remark = remark;
+            SolidWorksSoftwareCoefficient = solidWorksSoftwareCoefficient;
+            CreoSoftwareCoefficient = creoSoftwareCoefficient;
         }
 
         public string Category { get; }
         public string ObjectName { get; }
         public double Coefficient { get; }
         public string Remark { get; }
+        public double SolidWorksSoftwareCoefficient { get; }
+        public double CreoSoftwareCoefficient { get; }
     }
 }
+

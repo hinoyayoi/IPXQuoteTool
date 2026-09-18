@@ -3,6 +3,8 @@ using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using WinForms = System.Windows.Forms;
+using IPXQuoteTool.Cad.Common;
+using IPXQuoteTool.Cad.SolidWorks.Services;
 
 namespace IPXQuoteTool
 {
@@ -45,7 +47,7 @@ namespace IPXQuoteTool
         {
             using var dialog = new WinForms.OpenFileDialog
             {
-                Filter = "SolidWorks文件 (*.sldprt;*.sldasm;*.slddrw)|*.sldprt;*.sldasm;*.slddrw|所有文件 (*.*)|*.*",
+                Filter = "CAD文件 (*.sldprt;*.sldasm;*.slddrw;*.prt;*.asm;*.drw)|*.sldprt;*.sldasm;*.slddrw;*.prt;*.asm;*.drw|所有文件 (*.*)|*.*",
                 Multiselect = false
             };
 
@@ -71,9 +73,9 @@ namespace IPXQuoteTool
         private void Enable_Click(object sender, RoutedEventArgs e)
         {
             string filePath = txtSingleFilePath.Text?.Trim();
-            if (!IsSupportedSolidWorksFile(filePath))
+            if (!IsSupportedCadFile(filePath))
             {
-                MessageBox.Show(this, "请选择有效的 SolidWorks 文件（.sldprt/.sldasm/.slddrw）。", "单文件路径无效", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "请选择有效的 CAD 文件（SolidWorks 或 Creo）。", "单文件路径无效", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -90,7 +92,7 @@ namespace IPXQuoteTool
             Close();
         }
 
-        private static bool IsSupportedSolidWorksFile(string filePath)
+        private static bool IsSupportedCadFile(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
             {
@@ -102,10 +104,7 @@ namespace IPXQuoteTool
                 return false;
             }
 
-            string extension = Path.GetExtension(filePath);
-            return extension.Equals(".sldprt", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".sldasm", StringComparison.OrdinalIgnoreCase) ||
-                   extension.Equals(".slddrw", StringComparison.OrdinalIgnoreCase);
+            return CadFileTypeDetector.IsSupported(filePath);
         }
     }
 }

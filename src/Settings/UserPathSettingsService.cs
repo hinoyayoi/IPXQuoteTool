@@ -79,7 +79,9 @@ namespace IPXQuoteTool.Settings
 
         private static void ApplySettings(JsonObject settingsJson, UserPathSettings settings)
         {
+            SetString(settingsJson, nameof(UserPathSettings.SelectedSoftwareKind), settings.SelectedSoftwareKind);
             SetString(settingsJson, nameof(UserPathSettings.SolidWorksPath), settings.SolidWorksPath);
+            SetString(settingsJson, nameof(UserPathSettings.CreoPath), settings.CreoPath);
             SetString(settingsJson, nameof(UserPathSettings.DrawingFolderPath), settings.DrawingFolderPath);
             SetString(settingsJson, nameof(UserPathSettings.ReportFolderPath), settings.ReportFolderPath);
             settingsJson[nameof(UserPathSettings.UseOfflineDocumentManager)] = settings.UseOfflineDocumentManager;
@@ -173,3 +175,4 @@ namespace IPXQuoteTool.Settings
         }
     }
 }
+

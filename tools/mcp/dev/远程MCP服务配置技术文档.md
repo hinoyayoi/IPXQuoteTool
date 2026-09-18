@@ -1,4 +1,4 @@
-﻿# IPXQuoteTool 远程 MCP 服务配置技术文档
+# IPXQuoteTool 远程 MCP 服务配置技术文档
 
 ## 1. 文档目的
 
@@ -36,7 +36,7 @@
 MCP 服务位于：
 
 ```text
-C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+<repo-root>\tools\mcp\dev
 ```
 
 主要文件：
@@ -79,7 +79,7 @@ npm.cmd
 首次使用时，在 MCP 目录执行：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+cd <repo-root>\tools\mcp\dev
 npm.cmd install
 ```
 
@@ -90,7 +90,7 @@ npm.cmd install
 在开发主机上执行：
 
 ```powershell
-cd C:\Users\GESIC\Desktop\xuhongtao\IPXQuote-mytest\IPXQuotetest\tools\mcp\dev
+cd <repo-root>\tools\mcp\dev
 $env:IPX_MCP_HOST="0.0.0.0"
 $env:IPX_MCP_PORT="3001"
 $env:IPX_MCP_TOKEN="换成一段组内口令"

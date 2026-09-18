@@ -1,0 +1,514 @@
+#ifndef PROSRFCOLLECTION_H
+#define PROSRFCOLLECTION_H
+
+#include        <ProToolkit.h>
+#include        <ProCollect.h>
+#include        <ProReference.h>
+
+ 
+
+PRO_BEGIN_C_DECLS
+
+typedef void* ProSrfcollection;
+/* ========================================================================= */
+/* ======================= Instruction Types =============================== */
+/* ========================================================================= */
+
+typedef enum pro_coll_instr_type ProSrfcollinstrType;  /* Defined in
+							  ProCollect.h */
+
+/* ========================================================================= */
+/* ======================= Reference Type ================================== */
+/* ========================================================================= */
+
+typedef enum pro_coll_ref_type ProSrfcollrefType;  /* Defined in
+						      ProCollect.h */
+
+/* ========================================================================= */
+/* ======================= Surface Collection Instruction ================== */
+/* ========================================================================= */
+
+typedef void* ProSrfcollinstr;
+
+/* ========================================================================= */
+/* ======================= Surface Collection Reference   ================== */
+/* ========================================================================= */
+
+typedef void* ProSrfcollref;
+
+/* ========================================================================= */
+/* ======================= Surface Collection Reference API   ============== */
+/* ========================================================================= */
+
+extern ProError ProSrfcollrefAlloc (ProSrfcollrefType type,
+                                    ProReference      item,
+                                    ProSrfcollref*    ref);
+/*
+   Purpose: Allocates a surface collection reference handle
+
+   Input Arguments:
+       type -            The reference type.
+       item -            The reference item.
+
+   Output Arguments:
+       ref -            Pointer to the reference handle.
+
+   Return Values:
+       PRO_TK_NO_ERROR      - The function succeeded.
+       PRO_TK_BAD_INPUTS    - One or more arguments was invalid.
+       PRO_TK_OUT_OF_MEMORY - Memory allocation failure.     
+*/
+
+extern ProError ProSrfcollrefFree (ProSrfcollref ref);
+/*
+   Purpose: Frees a surface collection reference handle
+
+   Input Arguments:
+       ref -            Pointer to the reference handle.
+       
+   Output Arguments:
+       none
+
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.
+       PRO_TK_BAD_INPUTS  - One or more arguments was invalid.
+*/
+
+extern ProError ProSrfcollrefArrayFree (ProSrfcollref* ref);
+/*
+   Purpose: Frees a ProArray of surface collection reference handles
+
+   Input Arguments:
+       ref -            ProArray of reference handles.
+       
+   Output Arguments:
+       none
+
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.
+       PRO_TK_BAD_INPUTS  - One or more arguments was invalid.
+*/
+
+
+extern ProError ProSrfcollrefItemGet (ProSrfcollref ref,
+                                      ProReference* item);
+/*
+   Purpose: Returns the geometry item contained in a surface 
+            collection reference.
+
+   Input Arguments:
+       ref -            Pointer to the reference handle.
+
+   Output Arguments:
+	    item -          The reference item.
+       
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.
+       PRO_TK_BAD_INPUTS  - One or more arguments was invalid.
+*/
+
+extern ProError ProSrfcollrefTypeGet (ProSrfcollref      ref,
+                                      ProSrfcollrefType* type);
+/*
+   Purpose: Returns the type of reference contained in a surface 
+            collection reference.
+
+   Input Arguments:
+       ref -            Pointer to the reference handle.
+
+   Output Arguments:
+	    type -          The reference type.
+       
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.
+       PRO_TK_BAD_INPUTS  - One or more arguments was invalid.
+*/
+
+/* ========================================================================= */
+/* ======================= Surface Collection Instruction API ============== */
+/* ========================================================================= */
+extern ProError ProSrfcollinstrAlloc( ProSrfcollinstrType type,
+                                      ProBoolean          include,
+                                      ProSrfcollinstr*    r_instr );
+/*
+   Purpose: Allocates a surface collection instruction.<p><b>Note: </b>For exclude
+instructions (those with PRO_B_FALSE include input argument), only one-by-one (that is,
+those with PRO_SURFCOLL_SINGLE_SURF type input argument) are currently supported.
+
+   Input Arguments:
+       type    -       The instruction type.
+       include -       PRO_B_TRUE to add surfaces generated by this instruction
+                       to the surface set, PRO_B_FALSE to exclude surfaces 
+                       generated by this instruction from the set.
+
+   Output Arguments:
+       r_instr -            Pointer to surface collection instruction
+
+   Return Values:
+       PRO_TK_NO_ERROR        - The function succeeded.
+       PRO_TK_BAD_INPUTS      - One or more arguments was invalid.
+       PRO_TK_NOT_IMPLEMENTED - This case is not supported.
+       PRO_TK_OUT_OF_MEMORY   - Memory allocation failure.     
+*/
+
+extern ProError ProSrfcollinstrFree ( ProSrfcollinstr instr );
+/*
+   Purpose: Releases surface collection instruction
+
+   Input Arguments:
+       instr -            Pointer to surface collection instruction
+  
+   Output Arguments:
+        none
+
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.     
+       PRO_TK_BAD_INPUTS  - The argument was invalid. 
+*/
+
+extern ProError ProSrfcollinstrArrayFree ( ProSrfcollinstr* instrs );
+/*
+   Purpose: Releases a ProArray of surface collection instructions
+
+   Input Arguments:
+       instrs -            The surface collection instruction array
+  
+   Output Arguments:
+        none
+
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.     
+       PRO_TK_BAD_INPUTS  - The argument was invalid. 
+*/
+
+extern ProError ProSrfcollinstrTypeGet (ProSrfcollinstr    instr,
+                                        ProSrfcollinstrType* type);
+/*
+   Purpose: Gets the surface collection instruction type
+
+   Input Arguments:
+       instr -             Surface collection instruction
+       
+   Output Arguments:
+       type -               The instruction type.
+
+   Return Values:
+       PRO_TK_NO_ERROR   - The function succeeded.
+       PRO_TK_BAD_INPUTS - One or more arguments was invalid.
+*/
+
+extern ProError ProSrfcollinstrReferenceAdd( ProSrfcollinstr instr,
+                                             ProSrfcollref   reference );
+/*
+   Purpose: Adds a reference to surface collection instruction references
+
+   Input Arguments:
+       instr -             Surface collection instruction
+       reference -         The object reference
+
+   Output Arguments:
+        none
+
+   Return Values:
+       PRO_TK_NO_ERROR     - The function succeeded.   
+       PRO_TK_BAD_INPUTS   - One or more arguments was invalid. 
+       PRO_TK_INVALID_ITEM - Invalid item for this type of instruction.      
+
+*/
+
+extern ProError ProSrfcollinstrReferenceRemove( ProSrfcollinstr instr,
+                                                int     index );
+/*
+   Purpose: Removes a reference from surface collection instruction references
+
+   Input Arguments:
+       instr -             Surface collection instruction
+       index -             The index of the selection to remove
+
+   Output Arguments:
+        none
+
+   Return Values:
+       PRO_TK_NO_ERROR    - The function succeeded.   
+       PRO_TK_BAD_INPUTS  - One or more arguments was invalid. 
+       PRO_TK_E_NOT_FOUND - Invalid index for the instruction.
+
+   See Also:
+       ProSrfcollinstrReferencesGet()
+*/
+
+extern ProError ProSrfcollinstrReferencesGet( ProSrfcollinstr instr,
+                                              ProSrfcollref** reference_array );
+/*
+   Purpose: Returns the references contained in a surface collection instruction
+
+   Input Arguments:
+       instr -             Surface collection instruction
+       
+   Output Arguments:
+       reference_array -   ProArray of references.
+                           Free this array using ProSrfcollrefArrayFree().
+
+
+   Return Values:
+       PRO_TK_NO_ERROR     - The function succeeded.   
+       PRO_TK_BAD_INPUTS   - One or more arguments was invalid. 
+       PRO_TK_INVALID_ITEM - Invalid item for this type of instruction.      
+*/
+
+extern ProError ProSrfcollinstrIncludeSet ( ProSrfcollinstr instr,
+                                            ProBoolean      include );
+/*
+   Purpose: Sets the include flag for a surface collection instruction.<p><b>Note:</b>
+Only one-by-one (that is, those of PRO_SURFCOLL_SINGLE_SURF type) instructions can
+currently be excluded.
+
+   Input Arguments:
+       instr -              Surface collection instruction
+       include -            PRO_B_TRUE to include the surfaces generated by 
+                            this instruction in the set, PRO_B_FALSE to exclude
+                            the surfaces from the set.
+
+  Output Arguments:
+       none
+
+   Return Values:
+       PRO_TK_NO_ERROR        - The function succeeded.   
+       PRO_TK_BAD_INPUTS      - One or more arguments was invalid.
+       PRO_TK_NOT_IMPLEMENTED - This case is not supported.
+*/
+
+extern ProError ProSrfcollinstrIncludeGet ( ProSrfcollinstr instr, 
+                                            ProBoolean*     include );
+/*
+   Purpose: Checks that attribute of surface collection instruction is set
+
+   Input Arguments:
+       instr -               Surface collection instruction
+
+   Output Arguments:
+       include -           PRO_B_TRUE to include the surfaces generated by this
+                              instruction in the overall set, 
+                           PRO_B_FALSE to exclude the surfaces generated by this
+                              instruction in the overall set
+
+   Return Values:
+       PRO_TK_NO_ERROR   - The function succeeded.   
+       PRO_TK_BAD_INPUTS - One or more arguments was invalid.
+*/
+
+/* ========================================================================= */
+/* ========== Surface Collection instruction information defines =========== */
+/* ========================================================================= */
+ 
+ /* Bit flag specific to PRO_SURFCOLL_GEOM_RULE */
+ #define PRO_SURFCOLL_ALL_GEOM_RULE              ( 1 << 3 )/*If included with 
+         other rules ALL rules will be applied otherwise any applicable 
+         geometry rule will be applied*/
+
+ #define PRO_SURFCOLL_CO_PLANNAR_GEOM_RULE       ( 1 << 4 )/*Coplanar planes will be considered for the set */
+ #define PRO_SURFCOLL_PARALLEL_GEOM_RULE         ( 1 << 5 )/*Parallel planes will be considered for the set */
+ #define PRO_SURFCOLL_CO_AXIAL_GEOM_RULE         ( 1 << 6 )/*Coaxial surfaces will be considered for the set */
+ #define PRO_SURFCOLL_EQ_RADIUS_GEOM_RULE        ( 1 << 7 )/*Surfaces with equal radius will be considered for the set */
+ #define PRO_SURFCOLL_SAME_CONVEXITY_GEOM_RULE   ( 1 << 8 )/*Surfaces with same convexity will be considered for the set */
+
+ /* Bit flag specific to  PRO_SURFCOLL_SHAPE_BASED */
+ #define PRO_SURFCOLL_SHAPE_CHAMFER              ( 1 << 9 )/*If used alone Primary chamfer shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_ROUND                ( 1 << 10 )/*If used alone Primary round shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_PROTR_BOSS           ( 1 << 11 )/*Protrusion with secondary shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_PROTR_RIB            ( 1 << 12 )/*Protrusion without secondary shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_CUT_POCKET           ( 1 << 13 )/*Cut with secondary shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_CUT_SLOT             ( 1 << 14 )/*Cut without secondary shapes will be added to set*/
+ #define PRO_SURFCOLL_SHAPE_MORE_SHAPES          ( 1 << 16 )/*Only to be used with PRO_SURFCOLL_SHAPE_ROUND to add secondary round shapes*/
+
+ /* Bit flag specific to PRO_SURFCOLL_TANG_SRF */
+ #define PRO_SURFCOLL_TANGENT_NEIGBOURS_ONLY     ( 1 << 15 )
+
+ 
+
+
+extern ProError ProSrfCollinstrInfoSet ( ProSrfcollinstr instruction,
+                                         int info );
+/*
+    Purpose:     This function sets the collection instruction 
+                 specific bit flags information in the surface collection 
+                 instruction.
+                 
+                 For example, using this API, the geometry rule based
+                 attributes can be set.
+                 
+                <B>Note:</B> Before calling this API set the include flag (true/false) 
+                 for this surface collection instruction using ProSrfcollinstrIncludeSet()                 
+
+                 
+
+    Input Arguments:
+        instruction     - The instruction object
+        info            - The information bit flags. Pass as bitmask containing one or more of the bit flags 
+                          PRO_SURFCOLL_* defined ProSrfcollection.h
+
+                         
+
+    Output Arguments:
+        None
+
+    Return Values:
+        PRO_TK_NO_ERROR   - The function succeeded.
+        PRO_TK_BAD_INPUTS - One or more arguments was invalid.
+
+*/
+
+extern ProError ProSrfCollinstrInfoGet ( ProSrfcollinstr instruction,
+                                         int *r_info );
+/*
+    Purpose:     This function gets the collection instruction 
+                 specific bit flags information from the surface collection 
+                 instruction.
+
+    Input Arguments:
+        instruction     - The instruction object
+
+    Output Arguments:
+        r_info          - The information bit flags
+
+    Return Values:
+        PRO_TK_NO_ERROR   - The function succeeded.
+        PRO_TK_BAD_INPUTS - One or more arguments was invalid.
+
+*/
+
+
+/* ========================================================================= */
+/* ======================= Surface Collection API ========================== */
+/* ========================================================================= */
+
+extern ProError ProSrfcollectionAlloc( ProCollection* r_collection );
+/*
+   Purpose: Allocates a surface collection 
+ 
+   Input Arguments:
+       none
+
+   Output Arguments:
+       r_collection -       Pointer to surface collection
+
+   Return Values:
+       PRO_TK_NO_ERROR      - The function succeeded.
+       PRO_TK_BAD_INPUTS    - One or more arguments was invalid.
+       PRO_TK_OUT_OF_MEMORY - Memory allocation failure. 
+
+   See Also:   
+       ProCollectionFree()
+*/
+
+extern ProError ProSrfcollectionCopy( ProCollection  source,
+                                      ProCollection* target);
+/*
+   Purpose: Copies a surface collection.
+
+   Input Arguments:
+       source -             Surface collection
+
+   Output Arguments:
+       target -             The copy of the surface collection.  This will be 
+                            a newly allocated collection that should be freed 
+                            by ProCollectionFree().
+
+   Return Values:
+       PRO_TK_NO_ERROR      - The function succeeded.
+       PRO_TK_BAD_INPUTS    - One or more arguments was invalid.
+       PRO_TK_OUT_OF_MEMORY - Memory allocation failure.
+       PRO_TK_INVALID_TYPE  - The collection contains instructions for curves.  
+
+   See Also:   
+       ProCollectionFree()   
+*/
+
+extern ProError ProSrfcollectionInstructionAdd( ProCollection collection,
+                                                ProSrfcollinstr  instr );
+/*
+   Purpose: Adds instruction to surface collection
+
+   Input Arguments:
+       collection -         Surface collection
+       instr -              Instruction to add
+ 
+   Output Arguments:
+       none
+
+   Return Values:
+       PRO_TK_NO_ERROR     - The function succeeded.
+       PRO_TK_BAD_INPUTS   - One or more arguments was invalid.
+       PRO_TK_INVALID_TYPE - The collection contains instructions for curves.  
+*/
+
+extern ProError ProSrfcollectionInstructionRemove ( ProCollection collection,
+                                                    int index );
+/*
+   Purpose: Removes an instruction from the surface collection
+
+   Input Arguments:
+       collection -         Surface collection
+       index -              Index of the instruction to remove.
+
+   Output Arguments:
+       none
+
+   Return Values:
+       PRO_TK_NO_ERROR     - The function succeeded.
+       PRO_TK_BAD_INPUTS   - One or more arguments was invalid.
+       PRO_TK_E_NOT_FOUND  - Invalid index for the instruction.
+       PRO_TK_INVALID_TYPE - The collection contains instructions for curves.  
+*/
+
+extern ProError ProSrfcollectionInstructionsGet ( ProCollection collection,
+                                               ProSrfcollinstr** instrs_array );
+/*
+   Purpose: Returns an array of instructions assigned to the surface collection
+
+   Input Arguments:
+       collection -         Surface collection
+       
+   Output Arguments:
+       instrs_array -       ProArray of instructions.
+                            Free this array using ProSrfcollinstrArrayFree().
+
+   Return Values:
+       PRO_TK_NO_ERROR     - The function succeeded.
+       PRO_TK_BAD_INPUTS   - One or more arguments was invalid.
+       PRO_TK_E_NOT_FOUND  - Invalid index for the instruction.
+       PRO_TK_INVALID_TYPE - The collection contains instructions for curves.  
+*/
+
+extern ProError ProSrfcollectionRegenerate (ProCollection collection,
+                                            ProSelection   **r_result_sellist,
+                                            int              *r_result_sel_num);
+/*
+   Purpose:  Generate the selection based on the instructions set in the surface
+             collection. <p><b>Note: </b>This function will not be able to extract 
+geometry, if some or all of the resulting geometry is inactive due to material removal 
+features occuring in the model. In order to extract the reference geometry for such a 
+collection, use ProFeatureInsertModeActivate() to roll back the model before the 
+material remove feature. 
+
+   Input Arguments:
+        collection - The surface collection.
+
+   Output Arguments:
+        r_result_sellist - ProArray of selections allocated by the function. Use
+                           <B>ProSelectionarrayFree()</B> to free the memory. 
+        r_result_sel_num - Number of selections made.
+
+   Return Values:
+        PRO_TK_NO_ERROR      - The function successfully generated the
+                                collection.
+        PRO_TK_OUT_OF_MEMORY - There was a memory error.
+        PRO_TK_BAD_INPUTS    - The input argument is invalid.
+        PRO_TK_GENERAL_ERROR - There was a general error.
+
+*/
+
+PRO_END_C_DECLS
+
+#endif /* PROSRFCOLLECTION_H */
+

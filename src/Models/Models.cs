@@ -1,4 +1,4 @@
-﻿using SolidWorks.Interop.swconst;
+using IPXQuoteTool.Cad.Common;
 
 namespace IPXQuoteTool
 {
@@ -9,7 +9,7 @@ namespace IPXQuoteTool
     {
         public string FileName { get; set; }
         public string FilePath { get; set; }
-        public swDocumentTypes_e DocumentType { get; set; }
+        public CadDocumentType DocumentType { get; set; }
         
         // 通用
         public int ConfigurationCount { get; set; }
@@ -39,9 +39,9 @@ namespace IPXQuoteTool
 
         public string Category => DocumentType switch
         {
-            swDocumentTypes_e.swDocPART => "零件",
-            swDocumentTypes_e.swDocASSEMBLY => "装配",
-            swDocumentTypes_e.swDocDRAWING => "工程图",
+            CadDocumentType.Part => "零件",
+            CadDocumentType.Assembly => "装配",
+            CadDocumentType.Drawing => "工程图",
             _ => "未知"
         };
     }
@@ -69,3 +69,4 @@ namespace IPXQuoteTool
         public int TableCount { get; set; }
     }
 }
+

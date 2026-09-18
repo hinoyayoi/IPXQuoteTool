@@ -1,4 +1,4 @@
-﻿<Window x:Class="IPXQuoteTool.DeveloperModeWindow"
+<Window x:Class="IPXQuoteTool.DeveloperModeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="开发者模式"
@@ -70,7 +70,7 @@
             <TextBlock Grid.Row="1"
                        Grid.Column="1"
                        Grid.ColumnSpan="3"
-                       Text="启用后，运行费用估算时只处理该单个 SolidWorks 文件；关闭会恢复目录批量模式。"
+                       Text="启用后，运行费用估算时只处理该单个 CAD 文件；关闭会恢复目录批量模式。"
                        Foreground="#64748B"
                        Margin="0,10,0,0"/>
         </Grid>
@@ -96,3 +96,4 @@
         </StackPanel>
     </Grid>
 </Window>
+
