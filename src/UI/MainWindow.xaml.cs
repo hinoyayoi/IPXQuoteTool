@@ -65,10 +65,8 @@ namespace IPXQuoteTool
             string coefficientFilePath = ObjectCoefficientSettingsService.EnsureDefaultFile();
             Log("IPX费用估算已启动");
             Log($"对象系数表: {coefficientFilePath}");
-            Log(ObjectCoefficientSettingsService.IsRuntimePricingEditable
-                ? "当前为 Debug 计价模式：允许从对象系数表读取单价和复杂度系数。"
-                : "当前为 Release 计价模式：单价和复杂度系数使用程序内置值。");
-            Log("等待用户配置...");
+            Log("报价规则已加载");
+            Log("等待用户点击运行...");
             _progressReporter = new Progress<DocumentProgressUpdate>(ApplyProgressUpdate);
         }
 
