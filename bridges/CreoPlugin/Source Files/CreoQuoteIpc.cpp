@@ -1,5 +1,6 @@
 #include "CreoQuoteIpc.h"
 
+#include "CreoQuoteEnvironment.h"
 #include "CreoQuoteMetrics.h"
 #include "CreoQuotePluginLog.h"
 #include "CreoQuotePipeMessage.h"
@@ -16,15 +17,14 @@
 
 namespace
 {
-    const wchar_t* PipeName = L"\\\\.\\pipe\\IPXQuoteCreoPlugin";
     const char* TimerDialogName = "main_dlg_cur";
     const int TimerIntervalMs = 500;
     const int RequestTimeoutMs = 120000;
 
     struct PipeRequest
     {
-        PipeRequest(const std::wstring& requestedFilePath, const std::string& requestedId, bool protocolRequest)
-            : filePath(requestedFilePath), requestId(requestedId), useProtocol(protocolRequest), completedEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr))
+        PipeRequest(const std::wstring& requestedFilePath, const std::wstring& requestedPreviewOutputPath, const std::string& requestedId, bool protocolRequest)
+            : filePath(requestedFilePath), previewOutputPath(requestedPreviewOutputPath), requestId(requestedId), useProtocol(protocolRequest), completedEvent(CreateEventW(nullptr, TRUE, FALSE, nullptr))
         {
         }
 
@@ -37,6 +37,7 @@ namespace
         }
 
         std::wstring filePath;
+        std::wstring previewOutputPath;
         std::string requestId;
         bool useProtocol = false;
         std::string responseJson;
@@ -198,6 +199,8 @@ namespace
         response += ",\"status\":\"" + JsonEscape(status) + "\"";
         response += ",\"errorCode\":\"" + JsonEscape(errorCode) + "\"";
         response += ",\"message\":\"" + JsonEscape(message) + "\"";
+        response += ",\"environmentId\":\"" + JsonEscape(CreoQuotePlugin::GetCreoEnvironmentIdUtf8()) + "\"";
+        response += ",\"processPath\":\"" + JsonEscape(CreoQuotePlugin::GetCreoProcessPathUtf8()) + "\"";
         if (!metricsJson.empty())
         {
             response += ",\"metrics\":";
@@ -278,7 +281,7 @@ namespace
 
             try
             {
-                std::string metricsJson = CreoQuotePlugin::MetricsToJson(CreoQuotePlugin::CollectFileMetrics(request->filePath));
+                std::string metricsJson = CreoQuotePlugin::MetricsToJson(CreoQuotePlugin::CollectFileMetrics(request->filePath, request->previewOutputPath));
                 request->responseJson = request->useProtocol
                     ? MakeProtocolResponse(request->requestId, "ReadMetrics", "Succeeded", "", "", metricsJson)
                     : metricsJson;
@@ -347,12 +350,14 @@ namespace
         std::string requestId;
         std::string command = "ReadMetrics";
         std::string filePathText = requestText;
+        std::string previewOutputPathText;
 
         if (useProtocol)
         {
             requestId = ExtractJsonString(requestText, "requestId");
             command = ExtractJsonString(requestText, "command");
             filePathText = ExtractJsonString(requestText, "filePath");
+            previewOutputPathText = ExtractJsonString(requestText, "previewOutputPath");
             if (command.empty())
             {
                 command = "ReadMetrics";
@@ -375,6 +380,7 @@ namespace
         }
 
         std::wstring filePath = Utf8ToWide(filePathText);
+        std::wstring previewOutputPath = Utf8ToWide(previewOutputPathText);
         CreoQuotePlugin::WritePluginLog("ReadMetrics received. requestId=" + requestId, filePath);
         if (filePath.empty())
         {
@@ -386,7 +392,7 @@ namespace
             return;
         }
 
-        std::shared_ptr<PipeRequest> request = std::make_shared<PipeRequest>(filePath, requestId, useProtocol);
+        std::shared_ptr<PipeRequest> request = std::make_shared<PipeRequest>(filePath, previewOutputPath, requestId, useProtocol);
         if (request->completedEvent == nullptr)
         {
             std::string failedJson = MakeFailedJson(filePath, "Could not create Creo IPC completion event.");
@@ -417,8 +423,9 @@ namespace
     {
         while (g_running.load())
         {
+            std::wstring pipeName = CreoQuotePlugin::GetCreoPipeName();
             HANDLE pipe = CreateNamedPipeW(
-                PipeName,
+                pipeName.c_str(),
                 PIPE_ACCESS_DUPLEX,
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
                 1,
@@ -446,7 +453,8 @@ namespace
 
     void UnblockPipeServer()
     {
-        HANDLE pipe = CreateFileW(PipeName, GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+        std::wstring pipeName = CreoQuotePlugin::GetCreoPipeName();
+        HANDLE pipe = CreateFileW(pipeName.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
         if (pipe != INVALID_HANDLE_VALUE)
         {
             CloseHandle(pipe);
@@ -480,7 +488,7 @@ namespace CreoQuotePlugin
 
         RestartTimer();
         g_serverThread = std::thread(PipeServerLoop);
-        CreoQuotePlugin::WritePluginLog("IPC server started.");
+        CreoQuotePlugin::WritePluginLog("IPC server started. environmentId=" + CreoQuotePlugin::GetCreoEnvironmentIdUtf8());
         return true;
     }
 
@@ -508,4 +516,3 @@ namespace CreoQuotePlugin
         CreoQuotePlugin::WritePluginLog("IPC server stopped.");
     }
 }
-

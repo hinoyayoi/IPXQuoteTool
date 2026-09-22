@@ -85,7 +85,11 @@ namespace IPXQuoteTool.Cad.Creo.Diagnostics
                     DimensionCount = GetInt(root, "DimensionCount"),
                     TableCount = GetInt(root, "TableCount"),
                     Succeeded = GetBool(root, "Succeeded"),
-                    ErrorMessage = GetString(root, "ErrorMessage")
+                    ErrorMessage = GetString(root, "ErrorMessage"),
+                    PreviewImageSucceeded = GetBool(root, "PreviewImageSucceeded"),
+                    PreviewImagePath = GetString(root, "PreviewImagePath"),
+                    PreviewImageFormat = GetString(root, "PreviewImageFormat"),
+                    PreviewImageError = GetString(root, "PreviewImageError")
                 };
             }
             catch

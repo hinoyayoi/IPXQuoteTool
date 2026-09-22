@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -44,6 +44,9 @@ namespace IPXQuoteTool
         private string _developerSingleFilePath;
         private bool _isLoadingSavedPaths;
         private bool _isChangingOfflineMode;
+        private bool _calculationWindowPriorityRaised;
+        private bool _calculationPreviousTopmost;
+        private CreoPluginEnvironment _activeCreoPluginEnvironment;
         private CadSoftwareKind _activeSoftwareKind = CadSoftwareKind.SolidWorks;
         private int _developerTitleClickCount;
         private DateTime _firstDeveloperTitleClickTime;
@@ -814,6 +817,11 @@ namespace IPXQuoteTool
                 QuotePricingSettings pricingSettings = BuildPricingSettings();
                 Log($"已读取对象系数表: {ObjectCoefficientSettingsService.GetDefaultFilePath()}");
 
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    BeginCalculationWindowPriority();
+                }
+
                 ProcessingResult result = await RunStaTask(() => RunProcessing(selectedSoftware, useOfflineMode, softwarePath, drawingPath, reportPath, pricingSettings, _progressReporter));
 
                 if (result.Cancelled)
@@ -858,6 +866,7 @@ namespace IPXQuoteTool
             }
             finally
             {
+                EndCalculationWindowPriority();
                 _isRunning = false;
                 btnCancel.IsEnabled = false;
                 if (!_closeAfterCancel)
@@ -901,6 +910,8 @@ namespace IPXQuoteTool
 
         private async Task<bool> EnsureCreoPluginReadyOrExitAsync(string softwarePath)
         {
+            _activeCreoPluginEnvironment = null;
+
             CreoQuoteStartupResult result = await _creoQuoteStartupService.PrepareAsync(
                 softwarePath,
                 new CreoQuoteStartupInteraction
@@ -916,6 +927,10 @@ namespace IPXQuoteTool
             if (result.Succeeded)
             {
                 txtProgressText.Text = "Creo 插件已就绪，开始报价...";
+                _activeCreoPluginEnvironment = result.Environment;
+                _creoService.UsePluginEnvironment(result.Environment);
+                MinimizeActiveCreoProcesses();
+                Log($"Creo 插件环境: {result.Environment?.EnvironmentId}");
                 BringQuoteWindowToFront();
                 LogSuccess("Creo 插件已 Ready，可以开始报价。 ");
                 return true;
@@ -961,7 +976,8 @@ namespace IPXQuoteTool
             });
 
             root.Children.Add(CreateCreoPluginPathRow("Creo 注册文件", environment.RegistryFilePath));
-            root.Children.Add(CreateCreoPluginPathRow("插件 DLL", environment.PluginDllPath));
+            root.Children.Add(CreateCreoPluginPathRow("插件运行 DLL", environment.PluginDllPath));
+            root.Children.Add(CreateCreoPluginPathRow("插件环境", environment.EnvironmentId));
 
             root.Children.Add(new TextBlock
             {
@@ -1072,6 +1088,73 @@ namespace IPXQuoteTool
             return string.Join("\n", (processes ?? Array.Empty<CreoProcessInfo>()).Select(process => "- " + process.DisplayName));
         }
 
+        private static string GetCreoProcessVersionLabel(IReadOnlyList<CreoProcessInfo> processes)
+        {
+            foreach (CreoProcessInfo process in processes ?? Array.Empty<CreoProcessInfo>())
+            {
+                string path = process.ExecutablePath ?? string.Empty;
+                Match match = Regex.Match(path, @"Creo\s+([0-9]+)(?:\.[0-9]+)*", RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return "Creo" + match.Groups[1].Value;
+                }
+            }
+
+            return "Creo";
+        }
+
+        private void BeginCalculationWindowPriority()
+        {
+            try
+            {
+                _calculationPreviousTopmost = Topmost;
+                _calculationWindowPriorityRaised = true;
+
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+
+                Topmost = true;
+                Activate();
+                Focus();
+            }
+            catch
+            {
+            }
+        }
+
+        private void EndCalculationWindowPriority()
+        {
+            if (!_calculationWindowPriorityRaised)
+            {
+                return;
+            }
+
+            try
+            {
+                Topmost = _calculationPreviousTopmost;
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _calculationWindowPriorityRaised = false;
+                _calculationPreviousTopmost = false;
+            }
+        }
+
+        private void MinimizeActiveCreoProcesses()
+        {
+            try
+            {
+                _creoQuoteStartupService.MinimizeCreoProcesses(_activeCreoPluginEnvironment);
+            }
+            catch
+            {
+            }
+        }
         private void BringQuoteWindowToFront()
         {
             try
@@ -1203,7 +1286,7 @@ namespace IPXQuoteTool
             }
             else
             {
-                Log("Creo 模式：优先通过 Creo 插件 IPC 读取文件，手动 JSON 作为兜底。");
+                Log("通过 Creo 插件 IPC 读取文件。");
             }
 
             progress.Report(new DocumentProgressUpdate($"处理文档... (0/{files.Count})", 0, files.Count, 0, 0, 0));
@@ -1247,6 +1330,10 @@ namespace IPXQuoteTool
                 string currentFailureReason = null;
                 Log($"处理开始: {Path.GetFileName(file)}，开始时间: {FormatProcessingTime(DateTime.Now)}");
                 DocumentInfo info = ProcessCadDocument(file, selectedSoftware, useOfflineMode, offlineService, softwarePath);
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    MinimizeActiveCreoProcesses();
+                }
 
                 if (info != null)
                 {

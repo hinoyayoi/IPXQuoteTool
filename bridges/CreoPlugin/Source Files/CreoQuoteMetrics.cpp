@@ -19,13 +19,17 @@
 #include <ProSection.h>
 #include <ProSolid.h>
 #include <ProToolkit.h>
+#include <ProUtil.h>
+#include <ProWindows.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -464,7 +468,7 @@ namespace
         }
 
         std::wstring featureName = GetFeatureName(feature);
-        return StartsWithIgnoreCase(featureName, L"截面") ||
+        return StartsWithIgnoreCase(featureName, L"??") ||
                StartsWithIgnoreCase(featureName, L"SECTION");
     }
 
@@ -1299,7 +1303,10 @@ namespace
         output << "]\n";
     }
 
-    CreoQuotePlugin::CreoQuoteMetrics CollectModelMetrics(ProMdl model, const std::wstring& requestedFilePath)
+    void EnsureParentDirectory(const std::wstring& outputPath);
+    void MinimizeCurrentProcessTopLevelWindows();
+    void CaptureModelPreview(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath, CreoQuotePlugin::CreoQuoteMetrics& metrics);
+    CreoQuotePlugin::CreoQuoteMetrics CollectModelMetrics(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath)
     {
         CreoQuotePlugin::CreoQuoteMetrics metrics;
         metrics.filePath = requestedFilePath;
@@ -1334,7 +1341,114 @@ namespace
             break;
         }
 
+        if (!previewOutputPath.empty())
+        {
+            CaptureModelPreview(model, requestedFilePath, previewOutputPath, metrics);
+        }
+
         return metrics;
+    }
+
+
+
+    BOOL CALLBACK MinimizeTopLevelWindowForCurrentProcess(HWND windowHandle, LPARAM currentProcessIdParam)
+    {
+        DWORD windowProcessId = 0;
+        GetWindowThreadProcessId(windowHandle, &windowProcessId);
+        DWORD currentProcessId = static_cast<DWORD>(currentProcessIdParam);
+        if (windowProcessId != currentProcessId || !IsWindowVisible(windowHandle))
+        {
+            return TRUE;
+        }
+
+        ShowWindowAsync(windowHandle, SW_FORCEMINIMIZE);
+        ShowWindow(windowHandle, SW_MINIMIZE);
+        return TRUE;
+    }
+
+    void MinimizeCurrentProcessTopLevelWindows()
+    {
+        EnumWindows(MinimizeTopLevelWindowForCurrentProcess, static_cast<LPARAM>(GetCurrentProcessId()));
+    }
+    void CaptureModelPreview(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath, CreoQuotePlugin::CreoQuoteMetrics& metrics)
+    {
+        metrics.previewImagePath = previewOutputPath;
+        metrics.previewImageFormat = "jpg";
+
+        if (model == nullptr || previewOutputPath.empty())
+        {
+            metrics.previewImageError = "Preview output path is empty.";
+            return;
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
+
+        int defaultWindowId = -1;
+        ProWindowCurrentGet(&defaultWindowId);
+
+        ProMdlName modelName;
+        modelName[0] = L'\0';
+        ProError status = ProMdlNameGet(model, modelName);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not get Creo model name for preview. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        ProMdlType modelType = PRO_MDL_UNUSED;
+        status = ProMdlTypeGet(model, &modelType);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not get Creo model type for preview. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        if (modelType == PRO_MDL_DRAWING)
+        {
+            metrics.previewImageError = "ProRasterFileWrite does not support drawing previews.";
+            return;
+        }
+
+        int previewWindowId = -1;
+        status = ProObjectwindowMdlnameCreate(modelName, static_cast<ProType>(modelType), &previewWindowId);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not create Creo preview window. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
+
+        status = ProWindowCurrentSet(previewWindowId);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            ProMdlDisplay(model);
+            ProWindowRefresh(previewWindowId);
+            ProWindowRefit(previewWindowId);
+            MinimizeCurrentProcessTopLevelWindows();
+            Sleep(75);
+
+            ProPath outputPath;
+            outputPath[0] = L'\0';
+            wcsncpy_s(outputPath, previewOutputPath.c_str(), _TRUNCATE);
+            EnsureParentDirectory(previewOutputPath);
+            status = ProRasterFileWrite(previewWindowId, PRORASTERDEPTH_24, 5.2, 3.6, PRORASTERDPI_100, PRORASTERTYPE_JPEG, outputPath);
+        }
+
+        metrics.previewImageSucceeded = status == PRO_TK_NO_ERROR;
+        if (!metrics.previewImageSucceeded)
+        {
+            metrics.previewImageError = "Could not export Creo preview image. " + ToolkitErrorMessage(status);
+        }
+
+        if (defaultWindowId != -1 && defaultWindowId != previewWindowId)
+        {
+            ProWindowCurrentSet(defaultWindowId);
+            ProWindowDelete(previewWindowId);
+            ProMdlEraseNotDisplayed();
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
     }
 
     void EnsureParentDirectory(const std::wstring& outputPath)
@@ -1363,10 +1477,10 @@ namespace CreoQuotePlugin
             return metrics;
         }
 
-        return CollectModelMetrics(model, std::wstring());
+        return CollectModelMetrics(model, std::wstring(), std::wstring());
     }
 
-    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath)
+    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath, const std::wstring& previewOutputPath)
     {
         CreoQuoteMetrics metrics;
         metrics.filePath = filePath;
@@ -1377,7 +1491,7 @@ namespace CreoQuotePlugin
         wcsncpy_s(proPath, filePath.c_str(), _TRUNCATE);
 
         ProMdl model = nullptr;
-        ProError status = ProMdlFiletypeLoad(proPath, GetFileTypeFromPath(filePath), PRO_B_FALSE, &model);
+        ProError status = ProMdlFiletypeLoad(proPath, PRO_MDLFILE_UNUSED, PRO_B_FALSE, &model);
         if (status != PRO_TK_NO_ERROR || model == nullptr)
         {
             metrics.status = status == PRO_TK_NO_ERROR ? PRO_TK_GENERAL_ERROR : status;
@@ -1385,7 +1499,7 @@ namespace CreoQuotePlugin
             return metrics;
         }
 
-        return CollectModelMetrics(model, filePath);
+        return CollectModelMetrics(model, filePath, previewOutputPath);
     }
 
     std::string MetricsToJson(const CreoQuoteMetrics& metrics)
@@ -1413,6 +1527,10 @@ namespace CreoQuotePlugin
         output << "  \"NoteCount\": " << metrics.noteCount << ",\n";
         output << "  \"DimensionCount\": " << metrics.dimensionCount << ",\n";
         output << "  \"TableCount\": " << metrics.tableCount << ",\n";
+        output << "  \"PreviewImageSucceeded\": " << (metrics.previewImageSucceeded ? "true" : "false") << ",\n";
+        output << "  \"PreviewImagePath\": " << JsonString(metrics.previewImagePath) << ",\n";
+        output << "  \"PreviewImageFormat\": " << JsonString(metrics.previewImageFormat) << ",\n";
+        output << "  \"PreviewImageError\": " << JsonString(metrics.previewImageError) << ",\n";
         output << "  \"Diagnostics\": {\n";
         AppendStringArray(output, "ParameterNames", metrics.parameterNames, 4, true);
         AppendStringArray(output, "FamilyInstanceNames", metrics.familyInstanceNames, 4, true);
@@ -1461,4 +1579,3 @@ namespace CreoQuotePlugin
         return written == json.size();
     }
 }
-

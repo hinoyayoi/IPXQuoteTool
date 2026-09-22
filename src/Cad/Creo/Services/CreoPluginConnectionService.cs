@@ -21,19 +21,27 @@ namespace IPXQuoteTool.Cad.Creo.Services
 
         public Task<CreoPluginReadyResult> WaitUntilReadyAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
         {
-            return Task.Run(() => WaitUntilReady(timeout, cancellationToken), cancellationToken);
+            return WaitUntilReadyAsync(null, timeout, cancellationToken);
         }
 
-        private CreoPluginReadyResult WaitUntilReady(TimeSpan timeout, CancellationToken cancellationToken)
+        public Task<CreoPluginReadyResult> WaitUntilReadyAsync(CreoPluginEnvironment environment, TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            return Task.Run(() => WaitUntilReady(environment, timeout, cancellationToken), cancellationToken);
+        }
+
+        private CreoPluginReadyResult WaitUntilReady(CreoPluginEnvironment environment, TimeSpan timeout, CancellationToken cancellationToken)
         {
             DateTime deadline = DateTime.Now + timeout;
             string statusMessage = null;
+            CreoPluginPipeClient pipeClient = environment == null
+                ? _pipeClient
+                : new CreoPluginPipeClient(environment.PipeName, environment.EnvironmentId);
 
             while (DateTime.Now < deadline)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (_pipeClient.TryPing(out statusMessage))
+                if (pipeClient.TryPing(out statusMessage))
                 {
                     return CreoPluginReadyResult.Ready(statusMessage);
                 }

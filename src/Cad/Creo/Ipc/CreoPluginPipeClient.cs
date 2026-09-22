@@ -11,12 +11,26 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
 {
     internal class CreoPluginPipeClient
     {
-        private const string PipeName = "IPXQuoteCreoPlugin";
+        private const string DefaultPipeName = "IPXQuoteCreoPlugin";
         private const int ConnectTimeoutMs = 3000;
         private static readonly JsonSerializerOptions RequestJsonOptions = new JsonSerializerOptions
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         };
+
+        private readonly string _pipeName;
+        private readonly string _expectedEnvironmentId;
+
+        public CreoPluginPipeClient()
+            : this(DefaultPipeName, null)
+        {
+        }
+
+        public CreoPluginPipeClient(string pipeName, string expectedEnvironmentId)
+        {
+            _pipeName = string.IsNullOrWhiteSpace(pipeName) ? DefaultPipeName : pipeName;
+            _expectedEnvironmentId = expectedEnvironmentId;
+        }
 
         public bool TryPing(out string statusMessage)
         {
@@ -25,7 +39,8 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             {
                 version = 1,
                 requestId,
-                command = "Ping"
+                command = "Ping",
+                environmentId = _expectedEnvironmentId
             }, RequestJsonOptions);
 
             CreoPluginIpcOperationResult sendResult = SendRequest(requestJson, requestId);
@@ -42,6 +57,11 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
 
         public CreoDocumentMetricsDto TryReadDocument(string filePath, out string errorMessage)
         {
+            return TryReadDocument(filePath, null, out errorMessage);
+        }
+
+        public CreoDocumentMetricsDto TryReadDocument(string filePath, string previewOutputPath, out string errorMessage)
+        {
             errorMessage = null;
 
             if (string.IsNullOrWhiteSpace(filePath))
@@ -57,7 +77,9 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
                 requestId,
                 command = "ReadMetrics",
                 filePath,
-                timeoutMs = 120000
+                timeoutMs = 120000,
+                environmentId = _expectedEnvironmentId,
+                previewOutputPath
             }, RequestJsonOptions);
 
             CreoPluginIpcOperationResult sendResult = SendRequest(requestJson, requestId);
@@ -71,7 +93,7 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             return metrics;
         }
 
-        private static CreoPluginIpcOperationResult SendRequest(string requestJson, string requestId)
+        private CreoPluginIpcOperationResult SendRequest(string requestJson, string requestId)
         {
             CreoPluginIpcOperationResult framedResult = SendFramedRequest(requestJson, requestId);
             if (framedResult.IsSuccess || !ShouldRetryWithLegacyProtocol(framedResult))
@@ -82,7 +104,7 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             return SendLegacyRequest(requestJson, requestId);
         }
 
-        private static CreoPluginIpcOperationResult SendFramedRequest(string requestJson, string requestId)
+        private CreoPluginIpcOperationResult SendFramedRequest(string requestJson, string requestId)
         {
             try
             {
@@ -133,7 +155,7 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             }
         }
 
-        private static CreoPluginIpcOperationResult SendLegacyRequest(string requestJson, string requestId)
+        private CreoPluginIpcOperationResult SendLegacyRequest(string requestJson, string requestId)
         {
             try
             {
@@ -172,11 +194,11 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             }
         }
 
-        private static NamedPipeClientStream CreateConnectedPipe()
+        private NamedPipeClientStream CreateConnectedPipe()
         {
             NamedPipeClientStream pipe = new NamedPipeClientStream(
                 ".",
-                PipeName,
+                _pipeName,
                 PipeDirection.InOut,
                 PipeOptions.None);
             pipe.Connect(ConnectTimeoutMs);
@@ -203,7 +225,7 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
                 string.Equals(result.ErrorCode, "IncompleteMessageFrame", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static CreoPluginIpcOperationResult TryParsePingResponse(string json, string requestId)
+        private CreoPluginIpcOperationResult TryParsePingResponse(string json, string requestId)
         {
             try
             {
@@ -218,6 +240,17 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
                         requestId,
                         "MismatchedResponseId",
                         "Creo plugin returned a mismatched Ping response id.");
+                }
+
+                string responseEnvironmentId = GetString(root, "environmentId");
+                if (!string.IsNullOrWhiteSpace(_expectedEnvironmentId) &&
+                    !string.Equals(responseEnvironmentId, _expectedEnvironmentId, StringComparison.OrdinalIgnoreCase))
+                {
+                    return CreoPluginIpcOperationResult.Fail(
+                        CreoPluginIpcStatus.NotReady,
+                        requestId,
+                        "MismatchedCreoEnvironment",
+                        "Creo plugin environment does not match the selected Creo path. Expected " + _expectedEnvironmentId + ", got " + (responseEnvironmentId ?? "empty") + ".");
                 }
 
                 string status = GetString(root, "status");
@@ -247,7 +280,7 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
             }
         }
 
-        private static CreoDocumentMetricsDto ToDto(string json, string requestedFilePath, string requestId, out string errorMessage)
+        private CreoDocumentMetricsDto ToDto(string json, string requestedFilePath, string requestId, out string errorMessage)
         {
             errorMessage = null;
 
@@ -271,6 +304,18 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
                             "Creo plugin returned a mismatched response id.").ToErrorMessage();
                         return null;
                     }
+                }
+
+                string responseEnvironmentId = GetString(root, "environmentId");
+                if (!string.IsNullOrWhiteSpace(_expectedEnvironmentId) &&
+                    !string.Equals(responseEnvironmentId, _expectedEnvironmentId, StringComparison.OrdinalIgnoreCase))
+                {
+                    errorMessage = CreoPluginIpcOperationResult.Fail(
+                        CreoPluginIpcStatus.NotReady,
+                        requestId,
+                        "MismatchedCreoEnvironment",
+                        "Creo plugin environment does not match the selected Creo path. Expected " + _expectedEnvironmentId + ", got " + (responseEnvironmentId ?? "empty") + ".").ToErrorMessage();
+                    return null;
                 }
 
                 string status = GetString(root, "status");
@@ -334,7 +379,11 @@ namespace IPXQuoteTool.Cad.Creo.Ipc
                 DimensionCount = GetInt(root, "DimensionCount"),
                 TableCount = GetInt(root, "TableCount"),
                 Succeeded = GetBool(root, "Succeeded"),
-                ErrorMessage = GetString(root, "ErrorMessage")
+                ErrorMessage = GetString(root, "ErrorMessage"),
+                PreviewImageSucceeded = GetBool(root, "PreviewImageSucceeded"),
+                PreviewImagePath = GetString(root, "PreviewImagePath"),
+                PreviewImageFormat = GetString(root, "PreviewImageFormat"),
+                PreviewImageError = GetString(root, "PreviewImageError")
             };
         }
 

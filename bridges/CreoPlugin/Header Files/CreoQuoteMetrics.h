@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <string>
 #include <vector>
@@ -43,11 +43,15 @@ namespace CreoQuotePlugin
         std::vector<std::wstring> familyInstanceNames;
         std::wstring configurationSource;
         std::vector<std::wstring> configurationProbeMessages;
+        bool previewImageSucceeded = false;
+        std::wstring previewImagePath;
+        std::string previewImageFormat;
+        std::string previewImageError;
         std::vector<CreoQuoteFeatureDiagnostic> featureDiagnostics;
     };
 
     CreoQuoteMetrics CollectCurrentModelMetrics();
-    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath);
+    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath, const std::wstring& previewOutputPath = std::wstring());
     std::string MetricsToJson(const CreoQuoteMetrics& metrics);
     std::wstring GetDefaultMetricsPath();
     bool WriteMetricsJson(const CreoQuoteMetrics& metrics, const std::wstring& outputPath);
