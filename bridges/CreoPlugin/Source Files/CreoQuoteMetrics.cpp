@@ -1,9 +1,10 @@
 #include "CreoQuoteMetrics.h"
+#include "CreoQuoteAssemblyComponents.h"
+#include "CreoQuoteExpressionCounter.h"
 
 #include <windows.h>
 
 #include <ProArray.h>
-#include <ProAsmcomp.h>
 #include <ProDimension.h>
 #include <ProDrawing.h>
 #include <ProDtlnote.h>
@@ -14,7 +15,6 @@
 #include <ProFeatType.h>
 #include <ProMdl.h>
 #include <ProModelitem.h>
-#include <ProParameter.h>
 #include <ProPattern.h>
 #include <ProSection.h>
 #include <ProSolid.h>
@@ -283,6 +283,17 @@ namespace
         }
     }
 
+    bool IsPartAlwaysCountedBusinessFeatureType(ProFeattype featureType)
+    {
+        switch (featureType)
+        {
+        case PRO_FEAT_FLATTEN:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     ProPatternStatus GetPatternStatus(ProFeature* feature)
     {
         ProPatternStatus patternStatus = PRO_PATTERN_NONE;
@@ -305,16 +316,6 @@ namespace
         return groupPatternStatus;
     }
 
-    bool IsPatternLeaderOrMemberFeature(ProFeature* feature)
-    {
-        ProPatternStatus patternStatus = GetPatternStatus(feature);
-        ProGrppatternStatus groupPatternStatus = GetGroupPatternStatus(feature);
-        return patternStatus == PRO_PATTERN_LEADER ||
-               patternStatus == PRO_PATTERN_MEMBER ||
-               groupPatternStatus == PRO_GRP_PATTERN_LEADER ||
-               groupPatternStatus == PRO_GRP_PATTERN_MEMBER;
-    }
-
     bool IsPatternMemberFeature(ProFeature* feature)
     {
         ProPatternStatus patternStatus = GetPatternStatus(feature);
@@ -322,30 +323,6 @@ namespace
         return patternStatus == PRO_PATTERN_MEMBER ||
                groupPatternStatus == PRO_GRP_PATTERN_MEMBER;
     }
-
-    bool IsGroupMemberFeature(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        ProGroupStatus groupStatus = PRO_GROUP_NONE;
-        return ProFeatureGroupStatusGet(feature, &groupStatus) == PRO_TK_NO_ERROR &&
-               groupStatus == PRO_GROUP_MEMBER;
-    }
-
-    bool IsPatternComponentFeature(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        return GetPatternStatus(feature) != PRO_PATTERN_NONE ||
-               GetGroupPatternStatus(feature) != PRO_GRP_PATTERN_NONE;
-    }
-
     bool IsPatternHeaderFeature(ProFeature* feature, ProFeattype featureType)
     {
         if (featureType == PRO_FEAT_PATTERN_HEAD)
@@ -550,47 +527,6 @@ namespace
         return count;
     }
 
-    bool IsAssemblyFeatureType(ProFeattype featureType, ProFeature* feature)
-    {
-        ProPatternStatus patternStatus = GetPatternStatus(feature);
-        ProGrppatternStatus groupPatternStatus = GetGroupPatternStatus(feature);
-        if (patternStatus == PRO_PATTERN_LEADER || patternStatus == PRO_PATTERN_HEADER ||
-            groupPatternStatus == PRO_GRP_PATTERN_LEADER || groupPatternStatus == PRO_GRP_PATTERN_HEADER)
-        {
-            return true;
-        }
-
-        switch (featureType)
-        {
-        case PRO_FEAT_PATTERN_HEAD:
-        case PRO_FEAT_GROUP_HEAD:
-        case PRO_FEAT_ASSEM_CUT:
-        case PRO_FEAT_ASMCUT_COPY:
-        case PRO_FEAT_CUT:
-        case PRO_FEAT_HOLE:
-        case PRO_FEAT_CHAMFER:
-        case PRO_FEAT_CORN_CHAMF:
-        case PRO_FEAT_MOD_CHAMFER:
-        case PRO_FEAT_ROUND:
-        case PRO_FEAT_MOD_ROUND:
-        case PRO_FEAT_AUTO_ROUND:
-        case PRO_FEAT_PROTRUSION:
-        case PRO_FEAT_MERGE:
-        case PRO_FEAT_ASSY_MERGE:
-        case PRO_FEAT_GEN_MERGE:
-        case PRO_FEAT_GEOM_COPY:
-        case PRO_FEAT_UDF:
-        case PRO_FEAT_INT_UDF:
-        case PRO_FEAT_SHELL:
-        case PRO_FEAT_DRAFT:
-        case PRO_FEAT_THICKEN:
-        case PRO_FEAT_SOLIDIFY:
-            return true;
-        default:
-            return false;
-        }
-    }
-
     std::wstring GetFeatureName(ProFeature* feature)
     {
         if (feature == nullptr)
@@ -665,50 +601,28 @@ namespace
         diagnostic.groupPatternStatus = static_cast<int>(GetGroupPatternStatus(feature));
         metrics.featureDiagnostics.push_back(diagnostic);
     }
-    bool IsAssemblyComponentFeature(ProFeature* feature)
+
+    void AddComponentDiagnostic(CreoQuotePlugin::CreoQuoteMetrics& metrics, const CreoQuotePlugin::CreoQuoteAssemblyComponent& component)
     {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        ProAsmcomp component = *reinterpret_cast<ProAsmcomp*>(feature);
-        ProMdl componentModel = nullptr;
-        if (ProAsmcompMdlGet(&component, &componentModel) != PRO_TK_NO_ERROR || componentModel == nullptr)
-        {
-            return false;
-        }
-
-        ProMdlType modelType = PRO_MDL_UNUSED;
-        if (ProMdlTypeGet(componentModel, &modelType) != PRO_TK_NO_ERROR)
-        {
-            return false;
-        }
-
-        return modelType == PRO_MDL_PART || modelType == PRO_MDL_ASSEMBLY;
-    }
-
-    int CountComponentConstraints(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return 0;
-        }
-
-        ProAsmcomp component = *reinterpret_cast<ProAsmcomp*>(feature);
-        ProAsmcompconstraint* constraints = nullptr;
-        int count = 0;
-        if (ProAsmcompConstraintsGet(&component, &constraints) == PRO_TK_NO_ERROR && constraints != nullptr)
-        {
-            int size = 0;
-            if (ProArraySizeGet(constraints, &size) == PRO_TK_NO_ERROR && size > 0)
-            {
-                count = size;
-            }
-            ProArrayFree(reinterpret_cast<ProArray*>(&constraints));
-        }
-
-        return count;
+        AddFeatureDiagnostic(metrics, const_cast<ProFeature*>(&component.feature), component.featureType, component.category, true, component.constraintCount);
+        CreoQuotePlugin::CreoQuoteFeatureDiagnostic& diagnostic = metrics.featureDiagnostics.back();
+        diagnostic.placed = component.placed;
+        diagnostic.packaged = component.packaged;
+        diagnostic.unplaced = component.unplaced;
+        diagnostic.frozen = component.frozen;
+        diagnostic.bulkItem = component.bulkItem;
+        diagnostic.substitute = component.substitute;
+        diagnostic.underconstrained = component.underconstrained;
+        diagnostic.readOnly = component.readOnly;
+        diagnostic.incomplete = component.incomplete;
+        diagnostic.statusFlagsAvailable = component.statusFlagsAvailable;
+        diagnostic.statusFlags = component.statusFlags;
+        diagnostic.componentType = static_cast<int>(component.componentType);
+        diagnostic.modelType = static_cast<int>(component.modelType);
+        diagnostic.placementDefinitionFilterReason = component.placementDefinitionFilterReason;
+        diagnostic.componentMiscAttributesAvailable = component.componentMiscAttributesAvailable;
+        diagnostic.componentMiscAttributes = component.componentMiscAttributes;
+        diagnostic.constraintSource = component.constraintSource;
     }
 
     typedef ProError (*FeatureAction)(ProFeature*, ProError, ProAppData);
@@ -772,29 +686,6 @@ namespace
             ProArrayFree(reinterpret_cast<ProArray*>(&statusFlags));
         }
         return status;
-    }
-
-    ProError CountParameterAction(ProParameter* parameter, ProError status, ProAppData data)
-    {
-        if (parameter != nullptr && status == PRO_TK_NO_ERROR)
-        {
-            CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
-            ++metrics->expressionCount;
-            metrics->parameterNames.push_back(parameter->id);
-        }
-
-        return PRO_TK_NO_ERROR;
-    }
-
-    void PopulateExpressionCount(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
-    {
-        ProModelitem owner;
-        if (ProMdlToModelitem(model, &owner) != PRO_TK_NO_ERROR)
-        {
-            return;
-        }
-
-        ProParameterVisit(&owner, nullptr, CountParameterAction, &metrics);
     }
 
     struct FamilyTableColumnCounter
@@ -884,6 +775,7 @@ namespace
             CountFamilyTableColumnsFromModel(displayedTableOwner, metrics, L"DisplayedFamilyTableOwner");
         }
     }
+
     ProError CountPartFeatureAction(ProFeature* feature, ProError, ProAppData data)
     {
         CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
@@ -902,6 +794,14 @@ namespace
         if (IsPartNonQuoteAuxiliaryFeature(feature, featureType))
         {
             AddFeatureDiagnostic(*metrics, feature, featureType, "PartNonQuoteAuxiliaryFeature", false, 0);
+            return PRO_TK_NO_ERROR;
+        }
+
+        if (IsPartAlwaysCountedBusinessFeatureType(featureType))
+        {
+            int sectionCount = CountOwnedSections(feature, featureType);
+            metrics->featureCount += 1 + sectionCount;
+            AddFeatureDiagnostic(*metrics, feature, featureType, "PartBusinessFeature", true, sectionCount);
             return PRO_TK_NO_ERROR;
         }
 
@@ -929,64 +829,6 @@ namespace
         int sectionCount = CountOwnedSections(feature, featureType);
         metrics->featureCount += 1 + sectionCount;
         AddFeatureDiagnostic(*metrics, feature, featureType, "PartVisibleModelTreeFeature", true, sectionCount);
-        return PRO_TK_NO_ERROR;
-    }
-
-    ProError CountAssemblyFeatureAction(ProFeature* feature, ProError, ProAppData data)
-    {
-        CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
-        if (!IsCountableModelTreeFeature(feature))
-        {
-            return PRO_TK_NO_ERROR;
-        }
-
-        ProFeattype featureType = 0;
-        if (!TryGetFeatureType(feature, featureType))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "UnknownFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsGroupMemberFeature(feature))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "GroupMemberFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (featureType == PRO_FEAT_COMPONENT)
-        {
-            int constraintCount = CountComponentConstraints(feature);
-            if (IsPatternComponentFeature(feature))
-            {
-                AddFeatureDiagnostic(*metrics, feature, featureType, "PatternComponentFeature", false, constraintCount);
-                return PRO_TK_NO_ERROR;
-            }
-
-            if (!IsAssemblyComponentFeature(feature))
-            {
-                AddFeatureDiagnostic(*metrics, feature, featureType, "UnsupportedComponent", false, constraintCount);
-                return PRO_TK_NO_ERROR;
-            }
-
-            ++metrics->componentCount;
-            metrics->mateCount += constraintCount;
-            AddFeatureDiagnostic(*metrics, feature, featureType, "RootComponent", true, constraintCount);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsReferenceFeature(featureType))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "ReferenceFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsPatternMemberFeature(feature))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "PatternMemberFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        AddFeatureDiagnostic(*metrics, feature, featureType, IsAssemblyFeatureType(featureType, feature) ? "AssemblyTreeFeature" : "StaticAssemblyFeature", false, 0);
         return PRO_TK_NO_ERROR;
     }
 
@@ -1251,14 +1093,28 @@ namespace
     void PopulatePartCounts(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
     {
         ProSolid solid = reinterpret_cast<ProSolid>(model);
-        VisitActiveModelTreeFeatures(solid, CountPartFeatureAction, &metrics);
+        VisitDirectSolidFeatures(solid, CountPartFeatureAction, &metrics);
     }
 
     void PopulateAssemblyCounts(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
     {
-        metrics.assemblyFeatureCount = 1;
         ProSolid solid = reinterpret_cast<ProSolid>(model);
-        VisitDirectSolidFeatures(solid, CountAssemblyFeatureAction, &metrics);
+        CreoQuotePlugin::CreoQuoteAssemblyCounts assemblyCounts = CreoQuotePlugin::CollectQuoteAssemblyCounts(solid);
+        metrics.componentCount = assemblyCounts.componentCount;
+        metrics.mateCount = assemblyCounts.constraintCount;
+        metrics.assemblyFeatureCount = assemblyCounts.assemblyFeatureCount;
+
+        for (size_t i = 0; i < assemblyCounts.components.size(); ++i)
+        {
+            const CreoQuotePlugin::CreoQuoteAssemblyComponent& component = assemblyCounts.components[i];
+            AddComponentDiagnostic(metrics, component);
+        }
+
+        for (size_t i = 0; i < assemblyCounts.assemblyFeatures.size(); ++i)
+        {
+            const CreoQuotePlugin::CreoQuoteAssemblyFeature& assemblyFeature = assemblyCounts.assemblyFeatures[i];
+            AddFeatureDiagnostic(metrics, const_cast<ProFeature*>(&assemblyFeature.feature), assemblyFeature.featureType, assemblyFeature.category, true, 0);
+        }
     }
 
     void AppendStringArray(std::ostringstream& output, const char* name, const std::vector<std::wstring>& values, int indent, bool trailingComma)
@@ -1291,6 +1147,23 @@ namespace
                    << ", \"ConstraintCount\": " << feature.constraintCount
                    << ", \"PatternStatus\": " << feature.patternStatus
                    << ", \"GroupPatternStatus\": " << feature.groupPatternStatus
+                   << ", \"Placed\": " << (feature.placed ? "true" : "false")
+                   << ", \"Packaged\": " << (feature.packaged ? "true" : "false")
+                   << ", \"Unplaced\": " << (feature.unplaced ? "true" : "false")
+                   << ", \"Frozen\": " << (feature.frozen ? "true" : "false")
+                   << ", \"BulkItem\": " << (feature.bulkItem ? "true" : "false")
+                   << ", \"Substitute\": " << (feature.substitute ? "true" : "false")
+                   << ", \"Underconstrained\": " << (feature.underconstrained ? "true" : "false")
+                   << ", \"ReadOnly\": " << (feature.readOnly ? "true" : "false")
+                   << ", \"Incomplete\": " << (feature.incomplete ? "true" : "false")
+                   << ", \"StatusFlagsAvailable\": " << (feature.statusFlagsAvailable ? "true" : "false")
+                   << ", \"StatusFlags\": " << feature.statusFlags
+                   << ", \"ComponentType\": " << feature.componentType
+                   << ", \"ModelType\": " << feature.modelType
+                   << ", \"PlacementDefinitionFilterReason\": " << JsonString(feature.placementDefinitionFilterReason)
+                   << ", \"ComponentMiscAttributesAvailable\": " << (feature.componentMiscAttributesAvailable ? "true" : "false")
+                   << ", \"ComponentMiscAttributes\": " << feature.componentMiscAttributes
+                   << ", \"ConstraintSource\": " << JsonString(feature.constraintSource)
                    << "}";
             if (i + 1 < features.size()) output << ",";
             output << "\n";
@@ -1533,6 +1406,8 @@ namespace CreoQuotePlugin
         output << "  \"PreviewImageError\": " << JsonString(metrics.previewImageError) << ",\n";
         output << "  \"Diagnostics\": {\n";
         AppendStringArray(output, "ParameterNames", metrics.parameterNames, 4, true);
+        AppendStringArray(output, "ParameterDetails", metrics.parameterDiagnosticMessages, 4, true);
+        AppendStringArray(output, "FilteredParameterMessages", metrics.filteredParameterMessages, 4, true);
         AppendStringArray(output, "FamilyInstanceNames", metrics.familyInstanceNames, 4, true);
         output << "    \"ConfigurationSource\": " << JsonString(metrics.configurationSource) << ",\n";
         AppendStringArray(output, "ConfigurationProbeMessages", metrics.configurationProbeMessages, 4, true);
@@ -1579,3 +1454,4 @@ namespace CreoQuotePlugin
         return written == json.size();
     }
 }
+

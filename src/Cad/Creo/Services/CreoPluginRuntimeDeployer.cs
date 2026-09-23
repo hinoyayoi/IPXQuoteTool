@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace IPXQuoteTool.Cad.Creo.Services
@@ -7,8 +7,14 @@ namespace IPXQuoteTool.Cad.Creo.Services
     {
         public bool TryDeploy(CreoPluginEnvironment environment, out string message, out string error)
         {
+            return TryDeploy(environment, out message, out error, out _);
+        }
+
+        public bool TryDeploy(CreoPluginEnvironment environment, out string message, out string error, out bool changed)
+        {
             message = null;
             error = null;
+            changed = false;
 
             if (environment == null)
             {
@@ -26,13 +32,12 @@ namespace IPXQuoteTool.Cad.Creo.Services
             {
                 Directory.CreateDirectory(environment.DeployedPluginDirectory);
                 Directory.CreateDirectory(environment.TextDirectory);
-                bool changed = false;
 
                 changed |= CopyFileIfChanged(environment.PackagedPluginDllPath, environment.PluginDllPath);
                 CopyDirectoryFiles(environment.PackagedTextDirectory, environment.TextDirectory, ref changed);
 
                 message = changed
-                    ? "已准备 Creo 插件运行目录：" + environment.DeployedPluginDirectory
+                    ? "已更新 Creo 插件运行目录：" + environment.DeployedPluginDirectory
                     : "Creo 插件运行目录已是最新：" + environment.DeployedPluginDirectory;
                 return true;
             }
@@ -147,3 +152,4 @@ namespace IPXQuoteTool.Cad.Creo.Services
         }
     }
 }
+

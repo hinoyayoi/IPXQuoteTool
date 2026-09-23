@@ -46,6 +46,8 @@ namespace IPXQuoteTool
         private bool _isChangingOfflineMode;
         private bool _calculationWindowPriorityRaised;
         private bool _calculationPreviousTopmost;
+        private bool _calculationInputLanguageCaptured;
+        private WinForms.InputLanguage _calculationPreviousInputLanguage;
         private CreoPluginEnvironment _activeCreoPluginEnvironment;
         private CadSoftwareKind _activeSoftwareKind = CadSoftwareKind.SolidWorks;
         private int _developerTitleClickCount;
@@ -832,12 +834,12 @@ namespace IPXQuoteTool
                     {
                         LogSuccess($"已取消计算，已基于当前进度生成报表！共写入 {result.ProcessedCount} 个文件");
                         LogSuccess($"报表已保存到: {reportPath}");
-                        MessageBox.Show("已取消计算，并已基于当前进度生成报表，请前往报表路径查看结果！");
+                        ShowQuoteMessage("已取消计算，并已基于当前进度生成报表，请前往报表路径查看结果！", "计算取消", MessageBoxImage.Information);
                     }
                     else
                     {
                         LogError("已取消计算，但报表保存失败");
-                        MessageBox.Show($"已取消计算。\n已处理 {result.ProcessedCount} 个文件。\n报表保存失败，请检查路径权限。");
+                        ShowQuoteMessage($"已取消计算。\n已处理 {result.ProcessedCount} 个文件。\n报表保存失败，请检查路径权限。", "报表保存失败", MessageBoxImage.Warning);
                     }
 
                     return;
@@ -850,19 +852,19 @@ namespace IPXQuoteTool
                 {
                     LogSuccess($"处理完成！共处理 {result.ProcessedCount} 个文件");
                     LogSuccess($"报表已保存到: {reportPath}");
-                    MessageBox.Show("计算已完成，请前往报表路径查看结果！");
+                    ShowQuoteMessage("计算已完成，请前往报表路径查看结果！", "计算完成", MessageBoxImage.Information);
                 }
                 else
                 {
                     LogError("报表保存失败");
-                    MessageBox.Show($"处理完成！\n共处理 {result.ProcessedCount} 个文件\n报表保存失败，请检查路径权限。");
+                    ShowQuoteMessage($"处理完成！\n共处理 {result.ProcessedCount} 个文件\n报表保存失败，请检查路径权限。", "报表保存失败", MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)
             {
                 LogError($"处理过程中出错：{ex.Message}");
                 LogError($"异常详情：{ex.StackTrace}");
-                MessageBox.Show($"处理过程中出错：\n{ex.Message}");
+                ShowQuoteMessage($"处理过程中出错：\n{ex.Message}", "处理出错", MessageBoxImage.Error);
             }
             finally
             {
@@ -1105,6 +1107,8 @@ namespace IPXQuoteTool
 
         private void BeginCalculationWindowPriority()
         {
+            CaptureCalculationInputLanguage();
+
             try
             {
                 _calculationPreviousTopmost = Topmost;
@@ -1128,11 +1132,13 @@ namespace IPXQuoteTool
         {
             if (!_calculationWindowPriorityRaised)
             {
+                ClearCalculationInputLanguageCapture();
                 return;
             }
 
             try
             {
+                RestoreCalculationInputLanguage();
                 Topmost = _calculationPreviousTopmost;
             }
             catch
@@ -1142,7 +1148,44 @@ namespace IPXQuoteTool
             {
                 _calculationWindowPriorityRaised = false;
                 _calculationPreviousTopmost = false;
+                ClearCalculationInputLanguageCapture();
             }
+        }
+
+        private void CaptureCalculationInputLanguage()
+        {
+            try
+            {
+                _calculationPreviousInputLanguage = WinForms.InputLanguage.CurrentInputLanguage;
+                _calculationInputLanguageCaptured = _calculationPreviousInputLanguage != null;
+            }
+            catch
+            {
+                _calculationInputLanguageCaptured = false;
+                _calculationPreviousInputLanguage = null;
+            }
+        }
+
+        private void RestoreCalculationInputLanguage()
+        {
+            if (!_calculationInputLanguageCaptured || _calculationPreviousInputLanguage == null)
+            {
+                return;
+            }
+
+            try
+            {
+                WinForms.InputLanguage.CurrentInputLanguage = _calculationPreviousInputLanguage;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ClearCalculationInputLanguageCapture()
+        {
+            _calculationInputLanguageCaptured = false;
+            _calculationPreviousInputLanguage = null;
         }
 
         private void MinimizeActiveCreoProcesses()
@@ -1164,13 +1207,41 @@ namespace IPXQuoteTool
                     WindowState = WindowState.Normal;
                 }
 
+                bool previousTopmost = Topmost;
                 Activate();
                 Topmost = true;
-                Topmost = false;
+                Topmost = previousTopmost;
                 Focus();
             }
             catch
             {
+            }
+        }
+
+        private MessageBoxResult ShowQuoteMessage(string message, string caption, MessageBoxImage image)
+        {
+            RestoreCalculationInputLanguage();
+            bool previousTopmost = Topmost;
+
+            try
+            {
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+
+                Topmost = true;
+                Activate();
+                Focus();
+                return MessageBox.Show(this, message, caption, MessageBoxButton.OK, image);
+            }
+            finally
+            {
+                RestoreCalculationInputLanguage();
+                if (!_calculationWindowPriorityRaised)
+                {
+                    Topmost = previousTopmost;
+                }
             }
         }
 
@@ -1571,34 +1642,3 @@ namespace IPXQuoteTool
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

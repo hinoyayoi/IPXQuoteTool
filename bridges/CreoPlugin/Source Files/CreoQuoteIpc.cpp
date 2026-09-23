@@ -281,7 +281,9 @@ namespace
 
             try
             {
-                std::string metricsJson = CreoQuotePlugin::MetricsToJson(CreoQuotePlugin::CollectFileMetrics(request->filePath, request->previewOutputPath));
+                CreoQuotePlugin::CreoQuoteMetrics metrics = CreoQuotePlugin::CollectFileMetrics(request->filePath, request->previewOutputPath);
+                CreoQuotePlugin::WriteMetricsJson(metrics, CreoQuotePlugin::GetDefaultMetricsPath());
+                std::string metricsJson = CreoQuotePlugin::MetricsToJson(metrics);
                 request->responseJson = request->useProtocol
                     ? MakeProtocolResponse(request->requestId, "ReadMetrics", "Succeeded", "", "", metricsJson)
                     : metricsJson;
