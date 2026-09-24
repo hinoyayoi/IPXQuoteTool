@@ -932,8 +932,6 @@ namespace IPXQuoteTool
                 _activeCreoPluginEnvironment = result.Environment;
                 _creoService.UsePluginEnvironment(result.Environment);
                 MinimizeActiveCreoProcesses();
-                Log($"Creo 插件环境: {result.Environment?.EnvironmentId}");
-                BringQuoteWindowToFront();
                 LogSuccess("Creo 插件已 Ready，可以开始报价。 ");
                 return true;
             }
@@ -979,7 +977,6 @@ namespace IPXQuoteTool
 
             root.Children.Add(CreateCreoPluginPathRow("Creo 注册文件", environment.RegistryFilePath));
             root.Children.Add(CreateCreoPluginPathRow("插件运行 DLL", environment.PluginDllPath));
-            root.Children.Add(CreateCreoPluginPathRow("插件环境", environment.EnvironmentId));
 
             root.Children.Add(new TextBlock
             {
@@ -1108,24 +1105,8 @@ namespace IPXQuoteTool
         private void BeginCalculationWindowPriority()
         {
             CaptureCalculationInputLanguage();
-
-            try
-            {
-                _calculationPreviousTopmost = Topmost;
-                _calculationWindowPriorityRaised = true;
-
-                if (WindowState == WindowState.Minimized)
-                {
-                    WindowState = WindowState.Normal;
-                }
-
-                Topmost = true;
-                Activate();
-                Focus();
-            }
-            catch
-            {
-            }
+            _calculationPreviousTopmost = Topmost;
+            _calculationWindowPriorityRaised = true;
         }
 
         private void EndCalculationWindowPriority()
@@ -1198,26 +1179,6 @@ namespace IPXQuoteTool
             {
             }
         }
-        private void BringQuoteWindowToFront()
-        {
-            try
-            {
-                if (WindowState == WindowState.Minimized)
-                {
-                    WindowState = WindowState.Normal;
-                }
-
-                bool previousTopmost = Topmost;
-                Activate();
-                Topmost = true;
-                Topmost = previousTopmost;
-                Focus();
-            }
-            catch
-            {
-            }
-        }
-
         private MessageBoxResult ShowQuoteMessage(string message, string caption, MessageBoxImage image)
         {
             RestoreCalculationInputLanguage();
@@ -1400,6 +1361,11 @@ namespace IPXQuoteTool
                 bool currentProcessingFailed = false;
                 string currentFailureReason = null;
                 Log($"处理开始: {Path.GetFileName(file)}，开始时间: {FormatProcessingTime(DateTime.Now)}");
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    MinimizeActiveCreoProcesses();
+                }
+
                 DocumentInfo info = ProcessCadDocument(file, selectedSoftware, useOfflineMode, offlineService, softwarePath);
                 if (selectedSoftware == CadSoftwareKind.Creo)
                 {

@@ -17,43 +17,8 @@ namespace IPXQuoteTool.Cad.Creo.Services
 
         private static string GetRootDirectory()
         {
-            string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (IsAsciiPath(localAppData))
-            {
-                return Path.Combine(localAppData, RootFolderName);
-            }
-
             string commonAppData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
-            if (IsAsciiPath(commonAppData))
-            {
-                return Path.Combine(commonAppData, RootFolderName);
-            }
-
-            string systemDrive = Path.GetPathRoot(Environment.SystemDirectory);
-            if (string.IsNullOrWhiteSpace(systemDrive))
-            {
-                systemDrive = @"C:\";
-            }
-
-            return Path.Combine(systemDrive, RootFolderName);
-        }
-
-        private static bool IsAsciiPath(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return false;
-            }
-
-            foreach (char ch in path)
-            {
-                if (ch > 127)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return Path.Combine(commonAppData, RootFolderName);
         }
 
         private static string SanitizePathSegment(string value)
