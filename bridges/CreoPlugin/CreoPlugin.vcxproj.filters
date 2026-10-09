@@ -12,6 +12,18 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Header Files\CreoQuoteAssemblyComponents.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Header Files\CreoQuoteConstraintCounter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Header Files\CreoQuoteEnvironment.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Header Files\CreoQuoteExpressionCounter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Header Files\CreoQuoteIpc.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -26,6 +38,18 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Source Files\CreoQuoteAssemblyComponents.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Files\CreoQuoteConstraintCounter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Files\CreoQuoteEnvironment.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Source Files\CreoQuoteExpressionCounter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Source Files\CreoPlugin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -54,8 +78,3 @@
     </None>
   </ItemGroup>
 </Project>
-
-
-
-
-

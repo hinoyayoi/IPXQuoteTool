@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
@@ -8,16 +8,66 @@ namespace IPXQuoteTool.Cad.Creo.Services
     {
         private readonly CreoPluginDeploymentService _pluginSetupService;
         private readonly CreoPluginConnectionService _pluginConnectionService;
+        private readonly CreoPluginRuntimeDeployer _pluginRuntimeDeployer;
 
         public CreoQuoteStartupService()
-            : this(new CreoPluginDeploymentService(), new CreoPluginConnectionService())
+            : this(new CreoPluginDeploymentService(), new CreoPluginConnectionService(), new CreoPluginRuntimeDeployer())
         {
         }
 
-        internal CreoQuoteStartupService(CreoPluginDeploymentService pluginSetupService, CreoPluginConnectionService pluginConnectionService)
+        internal CreoQuoteStartupService(CreoPluginDeploymentService pluginSetupService, CreoPluginConnectionService pluginConnectionService, CreoPluginRuntimeDeployer pluginRuntimeDeployer)
         {
             _pluginSetupService = pluginSetupService;
             _pluginConnectionService = pluginConnectionService;
+            _pluginRuntimeDeployer = pluginRuntimeDeployer;
+        }
+        public void MinimizeCreoProcesses(CreoPluginEnvironment environment)
+        {
+            _pluginSetupService.MinimizeCreoProcesses(environment);
+        }
+
+        private bool TryDeployPluginRuntime(CreoPluginEnvironment environment, CreoQuoteStartupInteraction interaction, out string error)
+        {
+            if (_pluginRuntimeDeployer.TryDeploy(environment, out string deployMessage, out error))
+            {
+                if (!string.IsNullOrWhiteSpace(deployMessage))
+                {
+                    interaction.Log?.Invoke(deployMessage);
+                }
+
+                return true;
+            }
+
+            List<CreoProcessInfo> runningProcesses = _pluginSetupService.FindRunningCreoProcesses(environment);
+            if (runningProcesses.Count == 0)
+            {
+                return false;
+            }
+
+            if (interaction.ConfirmCloseForPluginRegistration == null || !interaction.ConfirmCloseForPluginRegistration(runningProcesses))
+            {
+                interaction.Log?.Invoke("用户拒绝关闭 Creo，已停止 Creo 插件运行目录准备。 ");
+                return false;
+            }
+
+            interaction.Log?.Invoke("正在关闭占用插件的 Creo 进程...");
+            if (!_pluginSetupService.CloseCreoProcesses(runningProcesses, out string closeError))
+            {
+                error = closeError;
+                return false;
+            }
+
+            if (_pluginRuntimeDeployer.TryDeploy(environment, out deployMessage, out error))
+            {
+                if (!string.IsNullOrWhiteSpace(deployMessage))
+                {
+                    interaction.Log?.Invoke(deployMessage);
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         public async Task<CreoQuoteStartupResult> PrepareAsync(string softwarePath, CreoQuoteStartupInteraction interaction)
@@ -31,6 +81,8 @@ namespace IPXQuoteTool.Cad.Creo.Services
 
             interaction.Log?.Invoke($"Creo 启动目录: {environment.BinDirectory}");
             interaction.Log?.Invoke($"Creo 插件注册文件: {environment.RegistryFilePath}");
+            interaction.Log?.Invoke($"Creo 插件运行目录: {environment.DeployedPluginDirectory}");
+            interaction.Log?.Invoke($"Creo IPC 管道: {environment.PipeName}");
 
             if (_pluginSetupService.TryRefreshPackagedPluginFromDevelopmentOutput(environment, out string refreshMessage) ||
                 !string.IsNullOrWhiteSpace(refreshMessage))
@@ -43,6 +95,14 @@ namespace IPXQuoteTool.Cad.Creo.Services
                     "Creo 插件缺失",
                     packageError + "\n\n请先重新打包，确保发布包中包含 creo-plugin 文件夹。");
             }
+
+            if (!TryDeployPluginRuntime(environment, interaction, out string deployError))
+            {
+                return CreoQuoteStartupResult.Failed(
+                    "Creo 插件运行目录准备失败",
+                    deployError ?? "无法复制 Creo 插件到运行目录。");
+            }
+
 
             if (!_pluginSetupService.IsConfigured(environment))
             {
@@ -92,7 +152,7 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 interaction.Log?.Invoke("检测到运行中的 Creo，正在检查插件 Ready...");
                 interaction.SetStatus?.Invoke("检查 Creo 插件...");
 
-                CreoPluginReadyResult existingReadyResult = await _pluginConnectionService.WaitUntilReadyAsync(TimeSpan.FromSeconds(5));
+                CreoPluginReadyResult existingReadyResult = await _pluginConnectionService.WaitUntilReadyAsync(environment, TimeSpan.FromSeconds(45));
                 if (existingReadyResult.IsReady)
                 {
                     return CreoQuoteStartupResult.Ready(environment, existingReadyResult.StatusMessage);
@@ -123,7 +183,7 @@ namespace IPXQuoteTool.Cad.Creo.Services
             interaction.Log?.Invoke("正在等待 Creo 插件 Ready...");
             interaction.SetStatus?.Invoke("等待 Creo 插件...");
 
-            CreoPluginReadyResult readyResult = await _pluginConnectionService.WaitUntilReadyAsync(TimeSpan.FromSeconds(60));
+            CreoPluginReadyResult readyResult = await _pluginConnectionService.WaitUntilReadyAsync(environment, TimeSpan.FromSeconds(120));
             if (!readyResult.IsReady)
             {
                 return CreoQuoteStartupResult.Failed(

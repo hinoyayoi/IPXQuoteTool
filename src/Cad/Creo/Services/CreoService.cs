@@ -11,19 +11,28 @@ namespace IPXQuoteTool.Cad.Creo.Services
     {
         private readonly CreoPluginJsonClient _pluginJsonClient;
         private readonly CreoPluginMetricsClient _pluginMetricsClient;
+        private readonly CreoPreviewImageService _previewImageService;
+        private CreoPluginEnvironment _pluginEnvironment;
 
         public CreoService()
-            : this(new CreoPluginJsonClient(), new CreoPluginMetricsClient())
+            : this(new CreoPluginJsonClient(), new CreoPluginMetricsClient(), new CreoPreviewImageService())
         {
         }
 
-        internal CreoService(CreoPluginJsonClient pluginJsonClient, CreoPluginMetricsClient pluginMetricsClient)
+        internal CreoService(CreoPluginJsonClient pluginJsonClient, CreoPluginMetricsClient pluginMetricsClient, CreoPreviewImageService previewImageService)
         {
             _pluginJsonClient = pluginJsonClient;
             _pluginMetricsClient = pluginMetricsClient;
+            _previewImageService = previewImageService;
         }
         public string LastError { get; private set; }
 
+
+        internal void UsePluginEnvironment(CreoPluginEnvironment environment)
+        {
+            _pluginEnvironment = environment;
+            SoftwarePath = environment?.CreoInstallRoot ?? SoftwarePath;
+        }
         public string SoftwarePath { get; set; }
 
         public CadSoftwareKind SoftwareKind => CadSoftwareKind.Creo;
@@ -45,35 +54,41 @@ namespace IPXQuoteTool.Cad.Creo.Services
             {
                 LastError = "Unsupported Creo file extension.";
                 DocumentInfo failedInfo = CreoDocumentInfoMapper.CreateFailedDocument(filePath, fileName, documentType, LastError);
-                AttachPreviewImage(failedInfo, filePath);
+                AttachPreviewImage(failedInfo, filePath, null);
                 return failedInfo;
             }
 
             string pipeError;
-            CreoDocumentMetricsDto metrics = _pluginMetricsClient.TryReadMetrics(filePath, out pipeError)
+            string previewOutputPath = _pluginEnvironment == null ? null : _previewImageService.CreatePreviewOutputPath(_pluginEnvironment, filePath);
+            CreoDocumentMetricsDto metrics = _pluginMetricsClient.TryReadMetrics(_pluginEnvironment, filePath, previewOutputPath, out pipeError)
                 ?? _pluginJsonClient.TryReadDocument(filePath);
+            if (metrics == null || string.IsNullOrWhiteSpace(metrics.PreviewImagePath))
+            {
+                _previewImageService.TryDeletePreviewFile(previewOutputPath);
+            }
             if (metrics == null)
             {
                 LastError = "Creo plugin did not return metrics through IPC, and no matching manual JSON was found. IPC error: " + (pipeError ?? "none") + ". Manual JSON: " + CreoPluginJsonClient.GetDefaultMetricsPath();
                 DocumentInfo failedInfo = CreoDocumentInfoMapper.CreateFailedDocument(filePath, fileName, documentType, LastError);
-                AttachPreviewImage(failedInfo, filePath);
+                AttachPreviewImage(failedInfo, filePath, null);
                 return failedInfo;
             }
 
             DocumentInfo info = CreoDocumentInfoMapper.ToDocumentInfo(metrics);
-            AttachPreviewImage(info, filePath);
+            AttachPreviewImage(info, filePath, metrics);
             LastError = info?.IsProcessingFailed == true ? info.ProcessingError : null;
             return info;
         }
 
-        private static void AttachPreviewImage(DocumentInfo info, string filePath)
+        private void AttachPreviewImage(DocumentInfo info, string filePath, CreoDocumentMetricsDto metrics)
         {
             if (info == null || info.PreviewImageBytes?.Length > 0)
             {
                 return;
             }
 
-            info.PreviewImageBytes = ShellThumbnailService.TryGetThumbnailImageBytes(filePath);
+            info.PreviewImageBytes = _previewImageService.TryReadPreviewImageBytes(metrics)
+                ?? ShellThumbnailService.TryGetThumbnailImageBytes(filePath);
         }
 
         private static CadDocumentType GetCreoDocumentType(string filePath)

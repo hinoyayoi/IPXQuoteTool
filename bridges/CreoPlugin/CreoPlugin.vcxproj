@@ -90,12 +90,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Header Files\CreoQuoteAssemblyComponents.h" />
+    <ClInclude Include="Header Files\CreoQuoteConstraintCounter.h" />
+    <ClInclude Include="Header Files\CreoQuoteEnvironment.h" />
+    <ClInclude Include="Header Files\CreoQuoteExpressionCounter.h" />
     <ClInclude Include="Header Files\CreoQuoteIpc.h" />
     <ClInclude Include="Header Files\CreoQuoteMetrics.h" />
     <ClInclude Include="Header Files\CreoQuotePluginLog.h" />
     <ClInclude Include="Header Files\CreoQuotePipeMessage.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Source Files\CreoQuoteAssemblyComponents.cpp" />
+    <ClCompile Include="Source Files\CreoQuoteConstraintCounter.cpp" />
+    <ClCompile Include="Source Files\CreoQuoteEnvironment.cpp" />
+    <ClCompile Include="Source Files\CreoQuoteExpressionCounter.cpp" />
     <ClCompile Include="Source Files\CreoPlugin.cpp" />
     <ClCompile Include="Source Files\CreoQuoteIpc.cpp" />
     <ClCompile Include="Source Files\CreoQuotePluginLog.cpp" />

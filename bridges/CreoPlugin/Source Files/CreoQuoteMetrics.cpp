@@ -1,9 +1,10 @@
 #include "CreoQuoteMetrics.h"
+#include "CreoQuoteAssemblyComponents.h"
+#include "CreoQuoteExpressionCounter.h"
 
 #include <windows.h>
 
 #include <ProArray.h>
-#include <ProAsmcomp.h>
 #include <ProDimension.h>
 #include <ProDrawing.h>
 #include <ProDtlnote.h>
@@ -14,18 +15,21 @@
 #include <ProFeatType.h>
 #include <ProMdl.h>
 #include <ProModelitem.h>
-#include <ProParameter.h>
 #include <ProPattern.h>
 #include <ProSection.h>
 #include <ProSolid.h>
 #include <ProToolkit.h>
+#include <ProUtil.h>
+#include <ProWindows.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cwchar>
 #include <cwctype>
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -279,6 +283,17 @@ namespace
         }
     }
 
+    bool IsPartAlwaysCountedBusinessFeatureType(ProFeattype featureType)
+    {
+        switch (featureType)
+        {
+        case PRO_FEAT_FLATTEN:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     ProPatternStatus GetPatternStatus(ProFeature* feature)
     {
         ProPatternStatus patternStatus = PRO_PATTERN_NONE;
@@ -301,16 +316,6 @@ namespace
         return groupPatternStatus;
     }
 
-    bool IsPatternLeaderOrMemberFeature(ProFeature* feature)
-    {
-        ProPatternStatus patternStatus = GetPatternStatus(feature);
-        ProGrppatternStatus groupPatternStatus = GetGroupPatternStatus(feature);
-        return patternStatus == PRO_PATTERN_LEADER ||
-               patternStatus == PRO_PATTERN_MEMBER ||
-               groupPatternStatus == PRO_GRP_PATTERN_LEADER ||
-               groupPatternStatus == PRO_GRP_PATTERN_MEMBER;
-    }
-
     bool IsPatternMemberFeature(ProFeature* feature)
     {
         ProPatternStatus patternStatus = GetPatternStatus(feature);
@@ -318,30 +323,6 @@ namespace
         return patternStatus == PRO_PATTERN_MEMBER ||
                groupPatternStatus == PRO_GRP_PATTERN_MEMBER;
     }
-
-    bool IsGroupMemberFeature(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        ProGroupStatus groupStatus = PRO_GROUP_NONE;
-        return ProFeatureGroupStatusGet(feature, &groupStatus) == PRO_TK_NO_ERROR &&
-               groupStatus == PRO_GROUP_MEMBER;
-    }
-
-    bool IsPatternComponentFeature(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        return GetPatternStatus(feature) != PRO_PATTERN_NONE ||
-               GetGroupPatternStatus(feature) != PRO_GRP_PATTERN_NONE;
-    }
-
     bool IsPatternHeaderFeature(ProFeature* feature, ProFeattype featureType)
     {
         if (featureType == PRO_FEAT_PATTERN_HEAD)
@@ -464,7 +445,7 @@ namespace
         }
 
         std::wstring featureName = GetFeatureName(feature);
-        return StartsWithIgnoreCase(featureName, L"截面") ||
+        return StartsWithIgnoreCase(featureName, L"??") ||
                StartsWithIgnoreCase(featureName, L"SECTION");
     }
 
@@ -546,47 +527,6 @@ namespace
         return count;
     }
 
-    bool IsAssemblyFeatureType(ProFeattype featureType, ProFeature* feature)
-    {
-        ProPatternStatus patternStatus = GetPatternStatus(feature);
-        ProGrppatternStatus groupPatternStatus = GetGroupPatternStatus(feature);
-        if (patternStatus == PRO_PATTERN_LEADER || patternStatus == PRO_PATTERN_HEADER ||
-            groupPatternStatus == PRO_GRP_PATTERN_LEADER || groupPatternStatus == PRO_GRP_PATTERN_HEADER)
-        {
-            return true;
-        }
-
-        switch (featureType)
-        {
-        case PRO_FEAT_PATTERN_HEAD:
-        case PRO_FEAT_GROUP_HEAD:
-        case PRO_FEAT_ASSEM_CUT:
-        case PRO_FEAT_ASMCUT_COPY:
-        case PRO_FEAT_CUT:
-        case PRO_FEAT_HOLE:
-        case PRO_FEAT_CHAMFER:
-        case PRO_FEAT_CORN_CHAMF:
-        case PRO_FEAT_MOD_CHAMFER:
-        case PRO_FEAT_ROUND:
-        case PRO_FEAT_MOD_ROUND:
-        case PRO_FEAT_AUTO_ROUND:
-        case PRO_FEAT_PROTRUSION:
-        case PRO_FEAT_MERGE:
-        case PRO_FEAT_ASSY_MERGE:
-        case PRO_FEAT_GEN_MERGE:
-        case PRO_FEAT_GEOM_COPY:
-        case PRO_FEAT_UDF:
-        case PRO_FEAT_INT_UDF:
-        case PRO_FEAT_SHELL:
-        case PRO_FEAT_DRAFT:
-        case PRO_FEAT_THICKEN:
-        case PRO_FEAT_SOLIDIFY:
-            return true;
-        default:
-            return false;
-        }
-    }
-
     std::wstring GetFeatureName(ProFeature* feature)
     {
         if (feature == nullptr)
@@ -661,50 +601,28 @@ namespace
         diagnostic.groupPatternStatus = static_cast<int>(GetGroupPatternStatus(feature));
         metrics.featureDiagnostics.push_back(diagnostic);
     }
-    bool IsAssemblyComponentFeature(ProFeature* feature)
+
+    void AddComponentDiagnostic(CreoQuotePlugin::CreoQuoteMetrics& metrics, const CreoQuotePlugin::CreoQuoteAssemblyComponent& component)
     {
-        if (feature == nullptr)
-        {
-            return false;
-        }
-
-        ProAsmcomp component = *reinterpret_cast<ProAsmcomp*>(feature);
-        ProMdl componentModel = nullptr;
-        if (ProAsmcompMdlGet(&component, &componentModel) != PRO_TK_NO_ERROR || componentModel == nullptr)
-        {
-            return false;
-        }
-
-        ProMdlType modelType = PRO_MDL_UNUSED;
-        if (ProMdlTypeGet(componentModel, &modelType) != PRO_TK_NO_ERROR)
-        {
-            return false;
-        }
-
-        return modelType == PRO_MDL_PART || modelType == PRO_MDL_ASSEMBLY;
-    }
-
-    int CountComponentConstraints(ProFeature* feature)
-    {
-        if (feature == nullptr)
-        {
-            return 0;
-        }
-
-        ProAsmcomp component = *reinterpret_cast<ProAsmcomp*>(feature);
-        ProAsmcompconstraint* constraints = nullptr;
-        int count = 0;
-        if (ProAsmcompConstraintsGet(&component, &constraints) == PRO_TK_NO_ERROR && constraints != nullptr)
-        {
-            int size = 0;
-            if (ProArraySizeGet(constraints, &size) == PRO_TK_NO_ERROR && size > 0)
-            {
-                count = size;
-            }
-            ProArrayFree(reinterpret_cast<ProArray*>(&constraints));
-        }
-
-        return count;
+        AddFeatureDiagnostic(metrics, const_cast<ProFeature*>(&component.feature), component.featureType, component.category, true, component.constraintCount);
+        CreoQuotePlugin::CreoQuoteFeatureDiagnostic& diagnostic = metrics.featureDiagnostics.back();
+        diagnostic.placed = component.placed;
+        diagnostic.packaged = component.packaged;
+        diagnostic.unplaced = component.unplaced;
+        diagnostic.frozen = component.frozen;
+        diagnostic.bulkItem = component.bulkItem;
+        diagnostic.substitute = component.substitute;
+        diagnostic.underconstrained = component.underconstrained;
+        diagnostic.readOnly = component.readOnly;
+        diagnostic.incomplete = component.incomplete;
+        diagnostic.statusFlagsAvailable = component.statusFlagsAvailable;
+        diagnostic.statusFlags = component.statusFlags;
+        diagnostic.componentType = static_cast<int>(component.componentType);
+        diagnostic.modelType = static_cast<int>(component.modelType);
+        diagnostic.placementDefinitionFilterReason = component.placementDefinitionFilterReason;
+        diagnostic.componentMiscAttributesAvailable = component.componentMiscAttributesAvailable;
+        diagnostic.componentMiscAttributes = component.componentMiscAttributes;
+        diagnostic.constraintSource = component.constraintSource;
     }
 
     typedef ProError (*FeatureAction)(ProFeature*, ProError, ProAppData);
@@ -768,29 +686,6 @@ namespace
             ProArrayFree(reinterpret_cast<ProArray*>(&statusFlags));
         }
         return status;
-    }
-
-    ProError CountParameterAction(ProParameter* parameter, ProError status, ProAppData data)
-    {
-        if (parameter != nullptr && status == PRO_TK_NO_ERROR)
-        {
-            CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
-            ++metrics->expressionCount;
-            metrics->parameterNames.push_back(parameter->id);
-        }
-
-        return PRO_TK_NO_ERROR;
-    }
-
-    void PopulateExpressionCount(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
-    {
-        ProModelitem owner;
-        if (ProMdlToModelitem(model, &owner) != PRO_TK_NO_ERROR)
-        {
-            return;
-        }
-
-        ProParameterVisit(&owner, nullptr, CountParameterAction, &metrics);
     }
 
     struct FamilyTableColumnCounter
@@ -880,6 +775,7 @@ namespace
             CountFamilyTableColumnsFromModel(displayedTableOwner, metrics, L"DisplayedFamilyTableOwner");
         }
     }
+
     ProError CountPartFeatureAction(ProFeature* feature, ProError, ProAppData data)
     {
         CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
@@ -898,6 +794,14 @@ namespace
         if (IsPartNonQuoteAuxiliaryFeature(feature, featureType))
         {
             AddFeatureDiagnostic(*metrics, feature, featureType, "PartNonQuoteAuxiliaryFeature", false, 0);
+            return PRO_TK_NO_ERROR;
+        }
+
+        if (IsPartAlwaysCountedBusinessFeatureType(featureType))
+        {
+            int sectionCount = CountOwnedSections(feature, featureType);
+            metrics->featureCount += 1 + sectionCount;
+            AddFeatureDiagnostic(*metrics, feature, featureType, "PartBusinessFeature", true, sectionCount);
             return PRO_TK_NO_ERROR;
         }
 
@@ -925,64 +829,6 @@ namespace
         int sectionCount = CountOwnedSections(feature, featureType);
         metrics->featureCount += 1 + sectionCount;
         AddFeatureDiagnostic(*metrics, feature, featureType, "PartVisibleModelTreeFeature", true, sectionCount);
-        return PRO_TK_NO_ERROR;
-    }
-
-    ProError CountAssemblyFeatureAction(ProFeature* feature, ProError, ProAppData data)
-    {
-        CreoQuotePlugin::CreoQuoteMetrics* metrics = reinterpret_cast<CreoQuotePlugin::CreoQuoteMetrics*>(data);
-        if (!IsCountableModelTreeFeature(feature))
-        {
-            return PRO_TK_NO_ERROR;
-        }
-
-        ProFeattype featureType = 0;
-        if (!TryGetFeatureType(feature, featureType))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "UnknownFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsGroupMemberFeature(feature))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "GroupMemberFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (featureType == PRO_FEAT_COMPONENT)
-        {
-            int constraintCount = CountComponentConstraints(feature);
-            if (IsPatternComponentFeature(feature))
-            {
-                AddFeatureDiagnostic(*metrics, feature, featureType, "PatternComponentFeature", false, constraintCount);
-                return PRO_TK_NO_ERROR;
-            }
-
-            if (!IsAssemblyComponentFeature(feature))
-            {
-                AddFeatureDiagnostic(*metrics, feature, featureType, "UnsupportedComponent", false, constraintCount);
-                return PRO_TK_NO_ERROR;
-            }
-
-            ++metrics->componentCount;
-            metrics->mateCount += constraintCount;
-            AddFeatureDiagnostic(*metrics, feature, featureType, "RootComponent", true, constraintCount);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsReferenceFeature(featureType))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "ReferenceFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        if (IsPatternMemberFeature(feature))
-        {
-            AddFeatureDiagnostic(*metrics, feature, featureType, "PatternMemberFeature", false, 0);
-            return PRO_TK_NO_ERROR;
-        }
-
-        AddFeatureDiagnostic(*metrics, feature, featureType, IsAssemblyFeatureType(featureType, feature) ? "AssemblyTreeFeature" : "StaticAssemblyFeature", false, 0);
         return PRO_TK_NO_ERROR;
     }
 
@@ -1247,14 +1093,28 @@ namespace
     void PopulatePartCounts(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
     {
         ProSolid solid = reinterpret_cast<ProSolid>(model);
-        VisitActiveModelTreeFeatures(solid, CountPartFeatureAction, &metrics);
+        VisitDirectSolidFeatures(solid, CountPartFeatureAction, &metrics);
     }
 
     void PopulateAssemblyCounts(ProMdl model, CreoQuotePlugin::CreoQuoteMetrics& metrics)
     {
-        metrics.assemblyFeatureCount = 1;
         ProSolid solid = reinterpret_cast<ProSolid>(model);
-        VisitDirectSolidFeatures(solid, CountAssemblyFeatureAction, &metrics);
+        CreoQuotePlugin::CreoQuoteAssemblyCounts assemblyCounts = CreoQuotePlugin::CollectQuoteAssemblyCounts(solid);
+        metrics.componentCount = assemblyCounts.componentCount;
+        metrics.mateCount = assemblyCounts.constraintCount;
+        metrics.assemblyFeatureCount = assemblyCounts.assemblyFeatureCount;
+
+        for (size_t i = 0; i < assemblyCounts.components.size(); ++i)
+        {
+            const CreoQuotePlugin::CreoQuoteAssemblyComponent& component = assemblyCounts.components[i];
+            AddComponentDiagnostic(metrics, component);
+        }
+
+        for (size_t i = 0; i < assemblyCounts.assemblyFeatures.size(); ++i)
+        {
+            const CreoQuotePlugin::CreoQuoteAssemblyFeature& assemblyFeature = assemblyCounts.assemblyFeatures[i];
+            AddFeatureDiagnostic(metrics, const_cast<ProFeature*>(&assemblyFeature.feature), assemblyFeature.featureType, assemblyFeature.category, true, 0);
+        }
     }
 
     void AppendStringArray(std::ostringstream& output, const char* name, const std::vector<std::wstring>& values, int indent, bool trailingComma)
@@ -1287,6 +1147,23 @@ namespace
                    << ", \"ConstraintCount\": " << feature.constraintCount
                    << ", \"PatternStatus\": " << feature.patternStatus
                    << ", \"GroupPatternStatus\": " << feature.groupPatternStatus
+                   << ", \"Placed\": " << (feature.placed ? "true" : "false")
+                   << ", \"Packaged\": " << (feature.packaged ? "true" : "false")
+                   << ", \"Unplaced\": " << (feature.unplaced ? "true" : "false")
+                   << ", \"Frozen\": " << (feature.frozen ? "true" : "false")
+                   << ", \"BulkItem\": " << (feature.bulkItem ? "true" : "false")
+                   << ", \"Substitute\": " << (feature.substitute ? "true" : "false")
+                   << ", \"Underconstrained\": " << (feature.underconstrained ? "true" : "false")
+                   << ", \"ReadOnly\": " << (feature.readOnly ? "true" : "false")
+                   << ", \"Incomplete\": " << (feature.incomplete ? "true" : "false")
+                   << ", \"StatusFlagsAvailable\": " << (feature.statusFlagsAvailable ? "true" : "false")
+                   << ", \"StatusFlags\": " << feature.statusFlags
+                   << ", \"ComponentType\": " << feature.componentType
+                   << ", \"ModelType\": " << feature.modelType
+                   << ", \"PlacementDefinitionFilterReason\": " << JsonString(feature.placementDefinitionFilterReason)
+                   << ", \"ComponentMiscAttributesAvailable\": " << (feature.componentMiscAttributesAvailable ? "true" : "false")
+                   << ", \"ComponentMiscAttributes\": " << feature.componentMiscAttributes
+                   << ", \"ConstraintSource\": " << JsonString(feature.constraintSource)
                    << "}";
             if (i + 1 < features.size()) output << ",";
             output << "\n";
@@ -1299,7 +1176,10 @@ namespace
         output << "]\n";
     }
 
-    CreoQuotePlugin::CreoQuoteMetrics CollectModelMetrics(ProMdl model, const std::wstring& requestedFilePath)
+    void EnsureParentDirectory(const std::wstring& outputPath);
+    void MinimizeCurrentProcessTopLevelWindows();
+    void CaptureModelPreview(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath, CreoQuotePlugin::CreoQuoteMetrics& metrics);
+    CreoQuotePlugin::CreoQuoteMetrics CollectModelMetrics(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath)
     {
         CreoQuotePlugin::CreoQuoteMetrics metrics;
         metrics.filePath = requestedFilePath;
@@ -1334,7 +1214,114 @@ namespace
             break;
         }
 
+        if (!previewOutputPath.empty())
+        {
+            CaptureModelPreview(model, requestedFilePath, previewOutputPath, metrics);
+        }
+
         return metrics;
+    }
+
+
+
+    BOOL CALLBACK MinimizeTopLevelWindowForCurrentProcess(HWND windowHandle, LPARAM currentProcessIdParam)
+    {
+        DWORD windowProcessId = 0;
+        GetWindowThreadProcessId(windowHandle, &windowProcessId);
+        DWORD currentProcessId = static_cast<DWORD>(currentProcessIdParam);
+        if (windowProcessId != currentProcessId || !IsWindowVisible(windowHandle))
+        {
+            return TRUE;
+        }
+
+        ShowWindowAsync(windowHandle, SW_FORCEMINIMIZE);
+        ShowWindow(windowHandle, SW_MINIMIZE);
+        return TRUE;
+    }
+
+    void MinimizeCurrentProcessTopLevelWindows()
+    {
+        EnumWindows(MinimizeTopLevelWindowForCurrentProcess, static_cast<LPARAM>(GetCurrentProcessId()));
+    }
+    void CaptureModelPreview(ProMdl model, const std::wstring& requestedFilePath, const std::wstring& previewOutputPath, CreoQuotePlugin::CreoQuoteMetrics& metrics)
+    {
+        metrics.previewImagePath = previewOutputPath;
+        metrics.previewImageFormat = "jpg";
+
+        if (model == nullptr || previewOutputPath.empty())
+        {
+            metrics.previewImageError = "Preview output path is empty.";
+            return;
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
+
+        int defaultWindowId = -1;
+        ProWindowCurrentGet(&defaultWindowId);
+
+        ProMdlName modelName;
+        modelName[0] = L'\0';
+        ProError status = ProMdlNameGet(model, modelName);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not get Creo model name for preview. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        ProMdlType modelType = PRO_MDL_UNUSED;
+        status = ProMdlTypeGet(model, &modelType);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not get Creo model type for preview. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        if (modelType == PRO_MDL_DRAWING)
+        {
+            metrics.previewImageError = "ProRasterFileWrite does not support drawing previews.";
+            return;
+        }
+
+        int previewWindowId = -1;
+        status = ProObjectwindowMdlnameCreate(modelName, static_cast<ProType>(modelType), &previewWindowId);
+        if (status != PRO_TK_NO_ERROR)
+        {
+            metrics.previewImageError = "Could not create Creo preview window. " + ToolkitErrorMessage(status);
+            return;
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
+
+        status = ProWindowCurrentSet(previewWindowId);
+        if (status == PRO_TK_NO_ERROR)
+        {
+            ProMdlDisplay(model);
+            ProWindowRefresh(previewWindowId);
+            ProWindowRefit(previewWindowId);
+            MinimizeCurrentProcessTopLevelWindows();
+            Sleep(75);
+
+            ProPath outputPath;
+            outputPath[0] = L'\0';
+            wcsncpy_s(outputPath, previewOutputPath.c_str(), _TRUNCATE);
+            EnsureParentDirectory(previewOutputPath);
+            status = ProRasterFileWrite(previewWindowId, PRORASTERDEPTH_24, 5.2, 3.6, PRORASTERDPI_100, PRORASTERTYPE_JPEG, outputPath);
+        }
+
+        metrics.previewImageSucceeded = status == PRO_TK_NO_ERROR;
+        if (!metrics.previewImageSucceeded)
+        {
+            metrics.previewImageError = "Could not export Creo preview image. " + ToolkitErrorMessage(status);
+        }
+
+        if (defaultWindowId != -1 && defaultWindowId != previewWindowId)
+        {
+            ProWindowCurrentSet(defaultWindowId);
+            ProWindowDelete(previewWindowId);
+            ProMdlEraseNotDisplayed();
+        }
+
+        MinimizeCurrentProcessTopLevelWindows();
     }
 
     void EnsureParentDirectory(const std::wstring& outputPath)
@@ -1363,10 +1350,10 @@ namespace CreoQuotePlugin
             return metrics;
         }
 
-        return CollectModelMetrics(model, std::wstring());
+        return CollectModelMetrics(model, std::wstring(), std::wstring());
     }
 
-    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath)
+    CreoQuoteMetrics CollectFileMetrics(const std::wstring& filePath, const std::wstring& previewOutputPath)
     {
         CreoQuoteMetrics metrics;
         metrics.filePath = filePath;
@@ -1377,7 +1364,7 @@ namespace CreoQuotePlugin
         wcsncpy_s(proPath, filePath.c_str(), _TRUNCATE);
 
         ProMdl model = nullptr;
-        ProError status = ProMdlFiletypeLoad(proPath, GetFileTypeFromPath(filePath), PRO_B_FALSE, &model);
+        ProError status = ProMdlFiletypeLoad(proPath, PRO_MDLFILE_UNUSED, PRO_B_FALSE, &model);
         if (status != PRO_TK_NO_ERROR || model == nullptr)
         {
             metrics.status = status == PRO_TK_NO_ERROR ? PRO_TK_GENERAL_ERROR : status;
@@ -1385,7 +1372,7 @@ namespace CreoQuotePlugin
             return metrics;
         }
 
-        return CollectModelMetrics(model, filePath);
+        return CollectModelMetrics(model, filePath, previewOutputPath);
     }
 
     std::string MetricsToJson(const CreoQuoteMetrics& metrics)
@@ -1413,8 +1400,14 @@ namespace CreoQuotePlugin
         output << "  \"NoteCount\": " << metrics.noteCount << ",\n";
         output << "  \"DimensionCount\": " << metrics.dimensionCount << ",\n";
         output << "  \"TableCount\": " << metrics.tableCount << ",\n";
+        output << "  \"PreviewImageSucceeded\": " << (metrics.previewImageSucceeded ? "true" : "false") << ",\n";
+        output << "  \"PreviewImagePath\": " << JsonString(metrics.previewImagePath) << ",\n";
+        output << "  \"PreviewImageFormat\": " << JsonString(metrics.previewImageFormat) << ",\n";
+        output << "  \"PreviewImageError\": " << JsonString(metrics.previewImageError) << ",\n";
         output << "  \"Diagnostics\": {\n";
         AppendStringArray(output, "ParameterNames", metrics.parameterNames, 4, true);
+        AppendStringArray(output, "ParameterDetails", metrics.parameterDiagnosticMessages, 4, true);
+        AppendStringArray(output, "FilteredParameterMessages", metrics.filteredParameterMessages, 4, true);
         AppendStringArray(output, "FamilyInstanceNames", metrics.familyInstanceNames, 4, true);
         output << "    \"ConfigurationSource\": " << JsonString(metrics.configurationSource) << ",\n";
         AppendStringArray(output, "ConfigurationProbeMessages", metrics.configurationProbeMessages, 4, true);

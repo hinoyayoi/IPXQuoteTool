@@ -19,5 +19,9 @@ namespace IPXQuoteTool.Cad.Creo.Models
         public int TableCount { get; set; }
         public bool Succeeded { get; set; }
         public string ErrorMessage { get; set; }
+        public bool PreviewImageSucceeded { get; set; }
+        public string PreviewImagePath { get; set; }
+        public string PreviewImageFormat { get; set; }
+        public string PreviewImageError { get; set; }
     }
 }

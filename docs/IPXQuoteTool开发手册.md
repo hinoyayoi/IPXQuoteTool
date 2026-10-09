@@ -12,6 +12,8 @@
 - PowerShell
 - SolidWorks 客户端
 - SolidWorks COM 注册正常
+- Creo 客户端，只有读取 Creo 文件时需要
+- Visual Studio C++ 桌面开发工具，只有编译 Creo Toolkit 插件时需要
 - Node.js 20 LTS 或更高版本，仅开发版 MCP 需要
 
 项目使用 WPF 桌面程序，目标框架为：
@@ -38,6 +40,9 @@ lib\SolidWorks\SolidWorks.Interop.sldworks.dll
 lib\SolidWorks\SolidWorks.Interop.swconst.dll
 lib\SolidWorks\SolidWorks.Interop.swpublished.dll
 lib\SolidWorks\SolidWorks.Interop.swdocumentmgr.dll
+bridges\CreoPlugin\CreoPlugin.vcxproj
+bridges\CreoPlugin\protk.dat.template
+bridges\CreoPlugin\text\IPXQuoteCreoPlugin.txt
 ```
 
 开发版 MCP 依赖安装：
@@ -66,8 +71,10 @@ src\Settings\UserPathSettingsService.cs
 
 | 字段 | 说明 |
 | --- | --- |
+| `SelectedSoftwareKind` | 当前选择的软件，取值为 `SolidWorks` 或 `Creo` |
 | `SolidWorksPath` | 用户选择的 SolidWorks 安装路径或 `sldworks.exe` 路径 |
-| `DrawingFolderPath` | 待分析 SolidWorks 文件目录 |
+| `CreoPath` | 用户选择的 Creo 安装目录或 `Parametric\bin` 路径 |
+| `DrawingFolderPath` | 待分析 CAD 文件目录 |
 | `ReportFolderPath` | 费用估算报表输出目录 |
 | `UseOfflineDocumentManager` | 离线读取开关，当前 UI 入口隐藏但配置保留 |
 | `DocumentManagerLicenseKey` | SolidWorks Document Manager License Key，当前作为后续离线模式测试预留 |
@@ -94,7 +101,7 @@ resources\Templates\对象系数.xlsx
 | 零件配置项系数 | `0.50` | 零件配置数量 |
 | 零件表达式系数 | `0.10` | 零件方程式/表达式 |
 | 装配组件数系数 | `0.60` | 装配一级组件 |
-| 装配约束系数 | `0.80` | SolidWorks 配合，报表中称为装配约束 |
+| 装配约束系数 | `0.80` | SolidWorks 配合；Creo 装配组件约束 |
 | 装配特征系数 | `1.00` | 装配级特征和虚拟组件零件特征 |
 | 工程图视图系数 | `0.80` | 工程图模型视图，不含 Sheet View |
 | 工程图标注系数 | `0.50` | 尺寸、中心线、中心标记、普通注释等 |
@@ -143,9 +150,9 @@ packaging\runntime\windowsdesktop-runtime-10.0.10-win-x64.exe
 验证点：
 
 - 主窗口能正常启动。
-- 能选择 SolidWorks 路径、图纸路径、报表路径。
-- 点击运行后能连接 SolidWorks。
-- 能扫描 `.sldprt`、`.sldasm`、`.slddrw` 文件。
+- 能选择软件类型、软件路径、图纸路径、报表路径。
+- 选择 SolidWorks 时能连接 SolidWorks，选择 Creo 时能完成插件配置并连接 Creo 插件。
+- 能扫描 `.sldprt`、`.sldasm`、`.slddrw` 以及 `.prt`、`.asm`、`.drw` 和 Creo 版本后缀文件。
 - 能生成 `费用估算_yyyyMMdd_HHmmss.xlsx`。
 - 取消按钮只在运行中可用，取消后会基于已完成数据生成报表。
 - 报表中包含表头、生成日期、图纸总数、等效特征数、估算总价。
@@ -154,11 +161,11 @@ packaging\runntime\windowsdesktop-runtime-10.0.10-win-x64.exe
 
 ### 2.1 业务背景
 
-IPXQuoteTool 是一个面向 SolidWorks 数据转换工作的费用估算工具。
+IPXQuoteTool 是一个面向 SolidWorks 和 Creo 数据转换工作的费用估算工具。
 
 核心目标：
 
-- 批量读取 SolidWorks 文件。
+- 批量读取 SolidWorks 和 Creo 文件。
 - 按文件类型提取对象数量。
 - 使用对象系数、复杂度系数、折扣系数和单价计算费用。
 - 输出费用估算 Excel 报表。
@@ -168,17 +175,22 @@ IPXQuoteTool 是一个面向 SolidWorks 数据转换工作的费用估算工具�
 
 | 扩展名 | 类型 | 统计重点 |
 | --- | --- | --- |
-| `.sldprt` | 零件 | 特征、配置项、表达式 |
-| `.sldasm` | 装配 | 一级组件、装配约束、装配特征、配置项、表达式 |
-| `.slddrw` | 工程图 | 视图、标注、表格 |
+| `.sldprt` | SolidWorks 零件 | 特征、配置项、表达式 |
+| `.sldasm` | SolidWorks 装配 | 一级组件、装配约束、装配特征、配置项、表达式 |
+| `.slddrw` | SolidWorks 工程图 | 视图、标注、表格 |
+| `.prt`、`.prt.1` | Creo 零件 | 特征、配置项、表达式 |
+| `.asm`、`.asm.1` | Creo 装配 | 组件、装配约束、装配特征、配置项、表达式 |
+| `.drw`、`.drw.1` | Creo 工程图 | 视图、标注、表格 |
 
 ### 2.2 技术选型及理由
 
 | 技术 | 用途 | 选择理由 |
 | --- | --- | --- |
-| WPF | 主程序 UI | 适合 Windows 桌面工具，便于和 SolidWorks 本地环境集成 |
+| WPF | 主程序 UI | 适合 Windows 桌面工具，便于和本地 CAD 环境集成 |
 | .NET 10 Windows | 主程序运行时 | 支持现代 C# 和 Windows 桌面能力 |
-| SolidWorks COM Interop | 文件读取和指标提取 | SolidWorks 官方桌面自动化接口，能读取真实 FeatureManager、工程图视图和标注 |
+| SolidWorks COM Interop | SolidWorks 文件读取和指标提取 | SolidWorks 官方桌面自动化接口，能读取真实 FeatureManager、工程图视图和标注 |
+| Creo Toolkit 插件 | Creo 文件读取和指标提取 | 通过 Creo 官方 Toolkit 在 Creo 进程内读取模型树、表达式、装配约束和预览图 |
+| Named Pipe IPC | 主程序与 Creo 插件通讯 | 主程序保持 WPF/.NET，Creo API 调用隔离在插件 DLL 内，降低耦合 |
 | OpenXML 手写 xlsx | 报表生成 | 不依赖 Excel 客户端，发布包更可控 |
 | 本地 JSON | 用户路径配置 | 简单、可迁移、无需数据库 |
 | xlsx 模板 | 对象系数配置 | 业务人员可直接用 Excel 修改系数 |
@@ -191,23 +203,17 @@ IPXQuoteTool 是一个面向 SolidWorks 数据转换工作的费用估算工具�
 src\UI\
   WPF 主窗口、开发者模式窗口、App 入口
 
-src\Services\
-  SolidWorks 连接、文件扫描、文档打开、报表保存、离线读取服务
+src\Cad\Common\
+  CAD 通用文件类型、服务接口、服务路由、缩略图辅助
 
-src\Analysis\
-  文档分析协调器、统计明细日志、各类型指标提取器
+src\Cad\SolidWorks\
+  SolidWorks 连接、文件扫描、文档打开、指标提取和离线读取服务
 
-src\Analysis\Parts\
-  零件指标提取和零件特征统计
+src\Cad\Creo\
+  Creo 插件配置、启动连接、IPC 客户端、结果映射和预览图处理
 
-src\Analysis\Assemblies\
-  装配体组件、配合、装配特征统计
-
-src\Analysis\Drawings\
-  工程图视图、标注、中心线、表格统计
-
-src\Analysis\Common\
-  通用 SolidWorks 指标，例如配置项、表达式
+bridges\CreoPlugin\
+  Creo Toolkit C++ 插件源码、protk.dat 模板和插件 text 资源
 
 src\Pricing\
   对象系数、复杂度系数、折扣和计价规则
@@ -227,6 +233,9 @@ resources\Templates\
 lib\SolidWorks\
   SolidWorks Interop DLL
 
+lib\Creo\
+  Creo Toolkit 头文件和库文件
+
 packaging\
   portable 发布脚本和运行时安装包
 
@@ -239,7 +248,10 @@ tools\mcp\dev\
 | 类 | 职责 |
 | --- | --- |
 | `MainWindow` | UI 交互、运行状态、取消控制、进度显示 |
+| `CadDocumentServiceRouter` | 按当前软件选择分派到 SolidWorks 或 Creo 服务 |
 | `SolidWorksService` | 连接 SolidWorks、打开文档、截图、分析、保存报表 |
+| `CreoQuoteStartupService` | 准备 Creo 插件运行目录、注册 protk.dat、启动或连接 Creo |
+| `CreoService` | 通过 Creo 插件 IPC 获取 Creo 文档指标并映射到通用报表模型 |
 | `DocumentAnalyzer` | 根据文档类型分派到具体 extractor |
 | `PartMetricExtractor` | 零件指标提取 |
 | `AssemblyMetricExtractor` | 装配指标提取 |
@@ -415,12 +427,19 @@ stateDiagram-v2
 
 | 入口 | 输入 | 输出 |
 | --- | --- | --- |
-| 运行 | SolidWorks 路径、图纸目录、报表目录、折扣 | 费用估算 xlsx |
+| 运行 | 软件类型、软件路径、图纸目录、报表目录、折扣 | 费用估算 xlsx |
 | 取消 | 用户确认 | 已完成数据的费用估算 xlsx |
 | 前往报表路径 | 报表目录 | 打开 Windows 文件夹 |
 | 运行日志标题连续点击 7 次 | 单文件路径 | 进入开发者单文件模式 |
 
 #### 4.1.2 内部服务接口
+
+`CadDocumentServiceRouter`：
+
+| 方法 | 说明 |
+| --- | --- |
+| `Resolve(CadSoftwareKind softwareKind)` | 按软件选择返回对应 CAD 服务 |
+| `GetSupportedFiles(string folderPath, CadSoftwareKind softwareKind)` | 按软件类型扫描支持的 CAD 文件 |
 
 `SolidWorksService`：
 
@@ -431,6 +450,20 @@ stateDiagram-v2
 | `ProcessDocument(string filePath)` | 打开并分析单个 SolidWorks 文档 |
 | `GenerateReport(List<DocumentInfo>, QuotePricingSettings)` | 生成 xlsx 字节内容 |
 | `SaveReport(string reportPath, byte[] content)` | 保存报表到指定目录 |
+
+`CreoQuoteStartupService`：
+
+| 方法 | 说明 |
+| --- | --- |
+| `PrepareAsync(string softwarePath, CreoQuoteStartupInteraction interaction)` | 解析 Creo 环境、部署插件运行目录、注册插件并等待 IPC 就绪 |
+| `MinimizeCreoProcesses(CreoPluginEnvironment environment)` | 在批量计算阶段最小化对应 Creo 进程 |
+
+`CreoService`：
+
+| 方法 | 说明 |
+| --- | --- |
+| `IsSupportedFile(string filePath)` | 判断 `.prt`、`.asm`、`.drw` 及版本后缀文件是否支持 |
+| `ProcessDocument(string filePath)` | 调用 Creo 插件读取指标并转换为 `DocumentInfo` |
 
 `DocumentAnalyzer`：
 
@@ -505,7 +538,7 @@ Authorization: Bearer 组内口令
 
 ### 4.2 错误码对照表
 
-程序本身主要通过异常信息、日志和 SolidWorks 打开文件错误码表达失败原因。
+程序本身主要通过异常信息、日志、SolidWorks 打开文件错误码以及 Creo 插件状态表达失败原因。
 
 常见 SolidWorks 打开失败：
 
@@ -521,6 +554,16 @@ Authorization: Bearer 组内口令
 | 文件被占用 | 文件被其他程序占用或无访问权限 | 释放文件占用、检查权限 |
 | 只读或已有同名文件 | 文件只读、已经打开或有同名文件打开 | 关闭冲突文件后重试 |
 | 超时 | 单文件处理超过 5 分钟 | 程序保留失败占位行，后续人工排查 |
+
+常见 Creo 处理失败：
+
+| 错误类型 | 用户提示 | 处理建议 |
+| --- | --- | --- |
+| Creo 路径无效 | Creo 路径无效 | 选择 Creo 安装目录、版本目录或 `Parametric\bin` 路径 |
+| 插件注册失败 | Creo 插件配置失败 | 允许管理员权限写入 `Parametric\bin\protk.dat`，或检查文件权限 |
+| 插件未就绪 | 未连接到 Creo 插件 | 确认 Creo 已启动并加载 `IPXQuoteCreoPlugin` |
+| IPC 超时 | Creo 插件未返回数据 | 查看插件日志，必要时重启 Creo 后重试 |
+| 模型无法读取 | Creo 文件读取失败 | 用 Creo 手动打开文件检查版本、缺失引用或损坏情况 |
 
 MCP HTTP 常见错误：
 
@@ -802,6 +845,102 @@ powershell -ExecutionPolicy Bypass -File .\publish-portable.ps1
 
 离线读取模式保留为技术探索能力，不作为客户正式使用路径。
 
-正式报价流程仍以正常 SolidWorks 模式为准，即启动或连接 SolidWorks 后进行文件读取、统计和报表生成。
+SolidWorks 正式报价流程仍以正常 SolidWorks 模式为准，即启动或连接 SolidWorks 后进行文件读取、统计和报表生成；Creo 不使用 Document Manager 离线读取模式。
 
 如后续继续研究离线读取，可仅将其用于辅助场景，例如快速预扫描文件列表、读取基础文件属性、判断文件类型或做开发调试参考，不建议用于最终报价数据生成。
+
+## 10. Creo 支持说明
+
+### 10.1 支持范围与总体流程
+
+Creo 读取通过 `bridges\CreoPlugin` 下的 Creo Toolkit 插件完成。主程序仍然是 WPF/.NET 程序，不直接调用 Creo Toolkit；启动 Creo 后，由 Creo 进程加载 `IPXQuoteCreoPlugin.dll`，再通过命名管道把指标返回给报价工具。
+
+总体流程：
+
+1. 用户在主界面选择软件为 `Creo`，并选择 Creo 安装目录、版本目录或 `Parametric\bin`。
+2. 主程序解析当前 Creo 环境，生成基于 Creo 安装根目录的 `environmentId`。
+3. 主程序把发布包中的 `creo-plugin` 目录复制到固定运行目录。
+4. 主程序检查并更新当前 Creo 的 `Parametric\bin\protk.dat`。
+5. 首次配置需要正常启动 Creo 窗口，以便 Creo 加载插件并完成连接。
+6. 批量计算时，主程序通过 IPC 请求插件打开文件、读取指标、生成预览图，并在每个文件处理前后尝试最小化 Creo。
+
+### 10.2 插件源码、发布包和运行目录
+
+源码目录：
+
+```text
+bridges\CreoPlugin\
+```
+
+发布包目录：
+
+```text
+IPXQuoteTool_Portable\creo-plugin\
+```
+
+运行目录是 Creo 实际加载 DLL 的位置，固定使用 ProgramData：
+
+```text
+C:\ProgramData\IPXQuoteTool\CreoPluginRuntime\<environmentId>\
+```
+
+这样做的目的不是把插件安装进 Creo 目录，而是让 Creo 从稳定、英文路径的公共运行目录加载插件，并避免 Creo 锁定发布包内 DLL 后影响后续更新。`environmentId` 仍由 Creo 安装根目录生成，用于隔离不同 Creo 安装环境；当前不再根据包路径或用户目录是否包含中文切换到不同目录。
+
+### 10.3 protk.dat 注册
+
+程序会在当前 Creo 的 `Parametric\bin\protk.dat` 中写入插件注册块：
+
+```text
+name IPXQuoteCreoPlugin
+startup dll
+exec_file <插件运行目录>\IPXQuoteCreoPlugin.dll
+text_dir <插件运行目录>\text
+revision 4
+end
+```
+
+写入 `protk.dat` 可能需要管理员权限。管理员权限主要用于更新 Creo 安装目录下的注册文件，不是把 DLL 复制到 Creo 安装目录。插件 DLL 统一复制到 ProgramData 下的运行目录；该目录写入权限取决于客户电脑策略。
+
+### 10.4 IPC 通讯与诊断文件
+
+插件被 Creo 加载后，会启动命名管道：
+
+```text
+IPXQuoteCreoPlugin_<environmentId>
+```
+
+报价工具通过该管道发送文件路径并读取指标。模型文件路径允许包含中文；IPC 使用 UTF-8 JSON，插件侧再转换为宽字符路径处理。
+
+常用诊断文件：
+
+```text
+%TEMP%\IPXQuoteCreoPlugin\plugin.log
+%TEMP%\IPXQuoteCreoPlugin\last-result.json
+```
+
+### 10.5 Creo 数据提取口径
+
+当前 Creo 插件以 Creo4 Toolkit 为基线编译，使用 Creo4 可用的通用 API 做数据提取，不是 Creo10 专版适配。后续如果要正式区分 Creo4、Creo10 等版本，应拆成不同 Toolkit 版本的插件 DLL，并按 Creo 版本选择对应 DLL。
+
+当前装配统计口径：
+
+- 组件数：按父装配模型树中的二级组件口径统计。只要特征类型是组件，即使组件模型无法解析，也仍计入组件数。
+- 装配特征：按装配同级的非组件特征统计，例如草绘、阵列、孔、拉伸、旋转等；基准、坐标系、引用类特征和容器类特征不计入。
+- 装配约束：只对可解析为零件或装配模型的组件读取约束。若组件模型无法解析到零件或装配类型，组件数保留，装配约束计 0。
+- 表达式：按 Creo 返回的有效表达式行统计，过滤空行和无效占位，避免比 Creo UI 多 1。
+
+### 10.6 预览图和窗口行为
+
+Creo 报表图片优先使用 Creo API 生成的预览图，质量高于 Windows 系统缩略图。由于 Creo 的显示和导图 API 需要在 Creo 进程内完成，批量计算时 Creo 窗口可能会出现短暂刷新。当前主程序会在启动连接完成后和每个文件处理前后最小化 Creo，并且不会强行把报价工具置顶。
+
+如果以后要完全避免窗口刷新，需要改成不走 Creo 预览窗口导图逻辑，报表图片改用 Windows 缩略图；代价是图片质量和可用率下降。
+
+### 10.7 发包检查
+
+Creo 发包时需要确认：
+
+- 已生成 `IPXQuoteCreoPlugin.dll`，常见位置是 `artifacts\bin\CreoPlugin\x64\Release\IPXQuoteCreoPlugin.dll` 或 `artifacts\bin\CreoPlugin\x64\Debug\IPXQuoteCreoPlugin.dll`。
+- portable 包中包含 `creo-plugin\IPXQuoteCreoPlugin.dll`。
+- portable 包中包含 `creo-plugin\text\IPXQuoteCreoPlugin.txt`。
+- portable 包中包含 `creo-plugin\protk.dat.template`。
+- 客户电脑如果需要读取 Creo 文件，必须安装对应 Creo，并允许程序写入或更新该 Creo `Parametric\bin\protk.dat` 中的插件注册块。

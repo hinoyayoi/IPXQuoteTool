@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -44,6 +44,11 @@ namespace IPXQuoteTool
         private string _developerSingleFilePath;
         private bool _isLoadingSavedPaths;
         private bool _isChangingOfflineMode;
+        private bool _calculationWindowPriorityRaised;
+        private bool _calculationPreviousTopmost;
+        private bool _calculationInputLanguageCaptured;
+        private WinForms.InputLanguage _calculationPreviousInputLanguage;
+        private CreoPluginEnvironment _activeCreoPluginEnvironment;
         private CadSoftwareKind _activeSoftwareKind = CadSoftwareKind.SolidWorks;
         private int _developerTitleClickCount;
         private DateTime _firstDeveloperTitleClickTime;
@@ -814,6 +819,11 @@ namespace IPXQuoteTool
                 QuotePricingSettings pricingSettings = BuildPricingSettings();
                 Log($"已读取对象系数表: {ObjectCoefficientSettingsService.GetDefaultFilePath()}");
 
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    BeginCalculationWindowPriority();
+                }
+
                 ProcessingResult result = await RunStaTask(() => RunProcessing(selectedSoftware, useOfflineMode, softwarePath, drawingPath, reportPath, pricingSettings, _progressReporter));
 
                 if (result.Cancelled)
@@ -824,12 +834,12 @@ namespace IPXQuoteTool
                     {
                         LogSuccess($"已取消计算，已基于当前进度生成报表！共写入 {result.ProcessedCount} 个文件");
                         LogSuccess($"报表已保存到: {reportPath}");
-                        MessageBox.Show("已取消计算，并已基于当前进度生成报表，请前往报表路径查看结果！");
+                        ShowQuoteMessage("已取消计算，并已基于当前进度生成报表，请前往报表路径查看结果！", "计算取消", MessageBoxImage.Information);
                     }
                     else
                     {
                         LogError("已取消计算，但报表保存失败");
-                        MessageBox.Show($"已取消计算。\n已处理 {result.ProcessedCount} 个文件。\n报表保存失败，请检查路径权限。");
+                        ShowQuoteMessage($"已取消计算。\n已处理 {result.ProcessedCount} 个文件。\n报表保存失败，请检查路径权限。", "报表保存失败", MessageBoxImage.Warning);
                     }
 
                     return;
@@ -842,22 +852,23 @@ namespace IPXQuoteTool
                 {
                     LogSuccess($"处理完成！共处理 {result.ProcessedCount} 个文件");
                     LogSuccess($"报表已保存到: {reportPath}");
-                    MessageBox.Show("计算已完成，请前往报表路径查看结果！");
+                    ShowQuoteMessage("计算已完成，请前往报表路径查看结果！", "计算完成", MessageBoxImage.Information);
                 }
                 else
                 {
                     LogError("报表保存失败");
-                    MessageBox.Show($"处理完成！\n共处理 {result.ProcessedCount} 个文件\n报表保存失败，请检查路径权限。");
+                    ShowQuoteMessage($"处理完成！\n共处理 {result.ProcessedCount} 个文件\n报表保存失败，请检查路径权限。", "报表保存失败", MessageBoxImage.Warning);
                 }
             }
             catch (Exception ex)
             {
                 LogError($"处理过程中出错：{ex.Message}");
                 LogError($"异常详情：{ex.StackTrace}");
-                MessageBox.Show($"处理过程中出错：\n{ex.Message}");
+                ShowQuoteMessage($"处理过程中出错：\n{ex.Message}", "处理出错", MessageBoxImage.Error);
             }
             finally
             {
+                EndCalculationWindowPriority();
                 _isRunning = false;
                 btnCancel.IsEnabled = false;
                 if (!_closeAfterCancel)
@@ -901,6 +912,8 @@ namespace IPXQuoteTool
 
         private async Task<bool> EnsureCreoPluginReadyOrExitAsync(string softwarePath)
         {
+            _activeCreoPluginEnvironment = null;
+
             CreoQuoteStartupResult result = await _creoQuoteStartupService.PrepareAsync(
                 softwarePath,
                 new CreoQuoteStartupInteraction
@@ -916,7 +929,9 @@ namespace IPXQuoteTool
             if (result.Succeeded)
             {
                 txtProgressText.Text = "Creo 插件已就绪，开始报价...";
-                BringQuoteWindowToFront();
+                _activeCreoPluginEnvironment = result.Environment;
+                _creoService.UsePluginEnvironment(result.Environment);
+                MinimizeActiveCreoProcesses();
                 LogSuccess("Creo 插件已 Ready，可以开始报价。 ");
                 return true;
             }
@@ -961,7 +976,7 @@ namespace IPXQuoteTool
             });
 
             root.Children.Add(CreateCreoPluginPathRow("Creo 注册文件", environment.RegistryFilePath));
-            root.Children.Add(CreateCreoPluginPathRow("插件 DLL", environment.PluginDllPath));
+            root.Children.Add(CreateCreoPluginPathRow("插件运行 DLL", environment.PluginDllPath));
 
             root.Children.Add(new TextBlock
             {
@@ -1072,8 +1087,103 @@ namespace IPXQuoteTool
             return string.Join("\n", (processes ?? Array.Empty<CreoProcessInfo>()).Select(process => "- " + process.DisplayName));
         }
 
-        private void BringQuoteWindowToFront()
+        private static string GetCreoProcessVersionLabel(IReadOnlyList<CreoProcessInfo> processes)
         {
+            foreach (CreoProcessInfo process in processes ?? Array.Empty<CreoProcessInfo>())
+            {
+                string path = process.ExecutablePath ?? string.Empty;
+                Match match = Regex.Match(path, @"Creo\s+([0-9]+)(?:\.[0-9]+)*", RegexOptions.IgnoreCase);
+                if (match.Success)
+                {
+                    return "Creo" + match.Groups[1].Value;
+                }
+            }
+
+            return "Creo";
+        }
+
+        private void BeginCalculationWindowPriority()
+        {
+            CaptureCalculationInputLanguage();
+            _calculationPreviousTopmost = Topmost;
+            _calculationWindowPriorityRaised = true;
+        }
+
+        private void EndCalculationWindowPriority()
+        {
+            if (!_calculationWindowPriorityRaised)
+            {
+                ClearCalculationInputLanguageCapture();
+                return;
+            }
+
+            try
+            {
+                RestoreCalculationInputLanguage();
+                Topmost = _calculationPreviousTopmost;
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _calculationWindowPriorityRaised = false;
+                _calculationPreviousTopmost = false;
+                ClearCalculationInputLanguageCapture();
+            }
+        }
+
+        private void CaptureCalculationInputLanguage()
+        {
+            try
+            {
+                _calculationPreviousInputLanguage = WinForms.InputLanguage.CurrentInputLanguage;
+                _calculationInputLanguageCaptured = _calculationPreviousInputLanguage != null;
+            }
+            catch
+            {
+                _calculationInputLanguageCaptured = false;
+                _calculationPreviousInputLanguage = null;
+            }
+        }
+
+        private void RestoreCalculationInputLanguage()
+        {
+            if (!_calculationInputLanguageCaptured || _calculationPreviousInputLanguage == null)
+            {
+                return;
+            }
+
+            try
+            {
+                WinForms.InputLanguage.CurrentInputLanguage = _calculationPreviousInputLanguage;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ClearCalculationInputLanguageCapture()
+        {
+            _calculationInputLanguageCaptured = false;
+            _calculationPreviousInputLanguage = null;
+        }
+
+        private void MinimizeActiveCreoProcesses()
+        {
+            try
+            {
+                _creoQuoteStartupService.MinimizeCreoProcesses(_activeCreoPluginEnvironment);
+            }
+            catch
+            {
+            }
+        }
+        private MessageBoxResult ShowQuoteMessage(string message, string caption, MessageBoxImage image)
+        {
+            RestoreCalculationInputLanguage();
+            bool previousTopmost = Topmost;
+
             try
             {
                 if (WindowState == WindowState.Minimized)
@@ -1081,13 +1191,18 @@ namespace IPXQuoteTool
                     WindowState = WindowState.Normal;
                 }
 
-                Activate();
                 Topmost = true;
-                Topmost = false;
+                Activate();
                 Focus();
+                return MessageBox.Show(this, message, caption, MessageBoxButton.OK, image);
             }
-            catch
+            finally
             {
+                RestoreCalculationInputLanguage();
+                if (!_calculationWindowPriorityRaised)
+                {
+                    Topmost = previousTopmost;
+                }
             }
         }
 
@@ -1203,7 +1318,7 @@ namespace IPXQuoteTool
             }
             else
             {
-                Log("Creo 模式：优先通过 Creo 插件 IPC 读取文件，手动 JSON 作为兜底。");
+                Log("通过 Creo 插件 IPC 读取文件。");
             }
 
             progress.Report(new DocumentProgressUpdate($"处理文档... (0/{files.Count})", 0, files.Count, 0, 0, 0));
@@ -1246,7 +1361,16 @@ namespace IPXQuoteTool
                 bool currentProcessingFailed = false;
                 string currentFailureReason = null;
                 Log($"处理开始: {Path.GetFileName(file)}，开始时间: {FormatProcessingTime(DateTime.Now)}");
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    MinimizeActiveCreoProcesses();
+                }
+
                 DocumentInfo info = ProcessCadDocument(file, selectedSoftware, useOfflineMode, offlineService, softwarePath);
+                if (selectedSoftware == CadSoftwareKind.Creo)
+                {
+                    MinimizeActiveCreoProcesses();
+                }
 
                 if (info != null)
                 {
@@ -1484,34 +1608,3 @@ namespace IPXQuoteTool
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

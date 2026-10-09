@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -12,8 +13,12 @@ namespace IPXQuoteTool.Cad.Creo.Services
     internal class CreoPluginDeploymentService
     {
         private const string PluginName = "IPXQuoteCreoPlugin";
+        private const int ShowWindowMinimize = 6;
+        private const int ShowWindowForceMinimize = 11;
         private const string PluginDllName = "IPXQuoteCreoPlugin.dll";
         private const string PackagedPluginFolderName = "creo-plugin";
+        private const string RuntimePluginRootFolderName = "IPXQuoteTool";
+        private const string RuntimePluginFolderName = "CreoPluginRuntime";
         private static readonly string[] CreoProcessNames = { "xtop", "parametric" };
 
         public bool TryResolveEnvironment(string selectedCreoPath, out CreoPluginEnvironment environment, out string error)
@@ -45,18 +50,28 @@ namespace IPXQuoteTool.Cad.Creo.Services
 
             string registryFilePath = Path.Combine(binDirectory, "protk.dat");
             string packagedPluginDirectory = Path.Combine(AppContext.BaseDirectory, PackagedPluginFolderName);
-            string pluginDllPath = Path.Combine(packagedPluginDirectory, PluginDllName);
-            string textDirectory = Path.Combine(packagedPluginDirectory, "text");
+            string packagedPluginDllPath = Path.Combine(packagedPluginDirectory, PluginDllName);
+            string packagedTextDirectory = Path.Combine(packagedPluginDirectory, "text");
+            string environmentId = CreoPluginEnvironmentIdentity.CreateEnvironmentId(creoInstallRoot);
+            string pipeName = CreoPluginEnvironmentIdentity.CreatePipeName(environmentId);
+            string deployedPluginDirectory = CreoPluginRuntimePath.GetPluginDirectory(environmentId);
+            string deployedPluginDllPath = Path.Combine(deployedPluginDirectory, PluginDllName);
+            string deployedTextDirectory = Path.Combine(deployedPluginDirectory, "text");
 
             environment = new CreoPluginEnvironment(
+                environmentId,
+                pipeName,
                 binDirectory,
                 parametricExePath,
                 parametricBatPath,
                 creoInstallRoot,
                 registryFilePath,
                 packagedPluginDirectory,
-                pluginDllPath,
-                textDirectory);
+                packagedPluginDllPath,
+                packagedTextDirectory,
+                deployedPluginDirectory,
+                deployedPluginDllPath,
+                deployedTextDirectory);
             return true;
         }
 
@@ -70,7 +85,7 @@ namespace IPXQuoteTool.Cad.Creo.Services
             }
 
             string sourceDllPath = FindDevelopmentPluginDll(AppContext.BaseDirectory);
-            if (string.IsNullOrWhiteSpace(sourceDllPath) || PathsEqual(sourceDllPath, environment.PluginDllPath))
+            if (string.IsNullOrWhiteSpace(sourceDllPath) || PathsEqual(sourceDllPath, environment.PackagedPluginDllPath))
             {
                 return false;
             }
@@ -80,19 +95,15 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 Directory.CreateDirectory(environment.PackagedPluginDirectory);
 
                 FileInfo sourceInfo = new FileInfo(sourceDllPath);
-                FileInfo targetInfo = new FileInfo(environment.PluginDllPath);
-                bool shouldCopy = !targetInfo.Exists ||
-                                  sourceInfo.Length != targetInfo.Length ||
-                                  sourceInfo.LastWriteTimeUtc > targetInfo.LastWriteTimeUtc;
-
-                if (!shouldCopy)
+                FileInfo targetInfo = new FileInfo(environment.PackagedPluginDllPath);
+                if (targetInfo.Exists && sourceInfo.Length == targetInfo.Length && FilesHaveSameContent(sourceDllPath, environment.PackagedPluginDllPath))
                 {
                     return false;
                 }
 
-                File.Copy(sourceDllPath, environment.PluginDllPath, overwrite: true);
-                TryRefreshPluginTextDirectory(sourceDllPath, environment.TextDirectory);
-                message = "本地调试：已同步最新 Creo 插件 DLL 到运行目录。";
+                File.Copy(sourceDllPath, environment.PackagedPluginDllPath, overwrite: true);
+                TryRefreshPluginTextDirectory(sourceDllPath, environment.PackagedTextDirectory);
+                message = "本地调试：已同步最新 Creo 插件 DLL 到发布包目录。";
                 return true;
             }
             catch (IOException ex)
@@ -116,15 +127,15 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 return false;
             }
 
-            if (!File.Exists(environment.PluginDllPath))
+            if (!File.Exists(environment.PackagedPluginDllPath))
             {
-                error = $"发布包中未找到 Creo 插件 DLL：{environment.PluginDllPath}";
+                error = $"发布包中未找到 Creo 插件 DLL：{environment.PackagedPluginDllPath}";
                 return false;
             }
 
-            if (!Directory.Exists(environment.TextDirectory))
+            if (!Directory.Exists(environment.PackagedTextDirectory))
             {
-                error = $"发布包中未找到 Creo 插件 text 目录：{environment.TextDirectory}";
+                error = $"发布包中未找到 Creo 插件 text 目录：{environment.PackagedTextDirectory}";
                 return false;
             }
 
@@ -138,22 +149,102 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 return null;
             }
 
+            string preferredConfiguration = GetConfigurationNameFromPath(startDirectory);
             var candidates = new List<string>();
             DirectoryInfo directory = new DirectoryInfo(startDirectory);
             while (directory != null)
             {
-                string pluginRoot = Path.Combine(directory.FullName, "bridges", "CreoPlugin", "x64");
-                candidates.Add(Path.Combine(pluginRoot, "Release", PluginDllName));
-                candidates.Add(Path.Combine(pluginRoot, "Debug", PluginDllName));
+                string artifactPluginRoot = Path.Combine(directory.FullName, "artifacts", "bin", "CreoPlugin", "x64");
+                AddPluginDllCandidates(candidates, artifactPluginRoot, preferredConfiguration);
+
+                string legacyPluginRoot = Path.Combine(directory.FullName, "bridges", "CreoPlugin", "x64");
+                AddPluginDllCandidates(candidates, legacyPluginRoot, preferredConfiguration);
                 directory = directory.Parent;
             }
 
             return candidates
                 .Where(File.Exists)
                 .Select(path => new FileInfo(path))
-                .OrderByDescending(file => file.LastWriteTimeUtc)
+                .OrderByDescending(file => IsPreferredConfiguration(file.FullName, preferredConfiguration))
+                .ThenByDescending(file => file.LastWriteTimeUtc)
                 .Select(file => file.FullName)
                 .FirstOrDefault();
+        }
+
+        private static void AddPluginDllCandidates(List<string> candidates, string pluginRoot, string preferredConfiguration)
+        {
+            if (!string.IsNullOrWhiteSpace(preferredConfiguration))
+            {
+                candidates.Add(Path.Combine(pluginRoot, preferredConfiguration, PluginDllName));
+            }
+
+            candidates.Add(Path.Combine(pluginRoot, "Release", PluginDllName));
+            candidates.Add(Path.Combine(pluginRoot, "Debug", PluginDllName));
+        }
+
+        private static string GetConfigurationNameFromPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return null;
+            }
+
+            string normalizedPath = path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+            if (normalizedPath.IndexOf(Path.DirectorySeparatorChar + "Debug" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Debug";
+            }
+
+            if (normalizedPath.IndexOf(Path.DirectorySeparatorChar + "Release" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "Release";
+            }
+
+            return null;
+        }
+
+        private static bool IsPreferredConfiguration(string path, string preferredConfiguration)
+        {
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(preferredConfiguration))
+            {
+                return false;
+            }
+
+            string marker = Path.DirectorySeparatorChar + preferredConfiguration + Path.DirectorySeparatorChar;
+            return path.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar)
+                .IndexOf(marker, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static bool FilesHaveSameContent(string sourcePath, string targetPath)
+        {
+            const int BufferSize = 81920;
+            using FileStream sourceStream = File.OpenRead(sourcePath);
+            using FileStream targetStream = File.OpenRead(targetPath);
+            byte[] sourceBuffer = new byte[BufferSize];
+            byte[] targetBuffer = new byte[BufferSize];
+
+            while (true)
+            {
+                int sourceRead = sourceStream.Read(sourceBuffer, 0, sourceBuffer.Length);
+                int targetRead = targetStream.Read(targetBuffer, 0, targetBuffer.Length);
+                if (sourceRead != targetRead)
+                {
+                    return false;
+                }
+
+                if (sourceRead == 0)
+                {
+                    return true;
+                }
+
+                for (int index = 0; index < sourceRead; index++)
+                {
+                    if (sourceBuffer[index] != targetBuffer[index])
+                    {
+                        return false;
+                    }
+                }
+            }
         }
 
         private static void TryRefreshPluginTextDirectory(string sourceDllPath, string targetTextDirectory)
@@ -273,6 +364,56 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 return false;
             }
         }
+        private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr hWnd);
+
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out int processId);
+
+        public void MinimizeCreoProcesses(CreoPluginEnvironment environment)
+        {
+            var processIds = new HashSet<int>(FindRunningCreoProcesses(environment).Select(process => process.ProcessId));
+            if (processIds.Count == 0)
+            {
+                return;
+            }
+
+            EnumWindows((windowHandle, _) =>
+            {
+                try
+                {
+                    if (!IsWindowVisible(windowHandle))
+                    {
+                        return true;
+                    }
+
+                    GetWindowThreadProcessId(windowHandle, out int windowProcessId);
+                    if (processIds.Contains(windowProcessId))
+                    {
+                        ShowWindowAsync(windowHandle, ShowWindowForceMinimize);
+                        ShowWindow(windowHandle, ShowWindowMinimize);
+                    }
+                }
+                catch
+                {
+                }
+
+                return true;
+            }, IntPtr.Zero);
+        }
+
 
         public List<CreoProcessInfo> FindRunningCreoProcesses(CreoPluginEnvironment environment)
         {
@@ -370,7 +511,8 @@ namespace IPXQuoteTool.Cad.Creo.Services
                 {
                     FileName = startPath,
                     WorkingDirectory = environment.BinDirectory,
-                    UseShellExecute = true
+                    UseShellExecute = true,
+                    WindowStyle = ProcessWindowStyle.Normal
                 };
                 Process.Start(startInfo);
                 return true;
@@ -643,31 +785,46 @@ Set-Content -LiteralPath $target -Value $text -Encoding ASCII
     internal class CreoPluginEnvironment
     {
         public CreoPluginEnvironment(
+            string environmentId,
+            string pipeName,
             string binDirectory,
             string parametricExePath,
             string parametricBatPath,
             string creoInstallRoot,
             string registryFilePath,
             string packagedPluginDirectory,
+            string packagedPluginDllPath,
+            string packagedTextDirectory,
+            string deployedPluginDirectory,
             string pluginDllPath,
             string textDirectory)
         {
+            EnvironmentId = environmentId;
+            PipeName = pipeName;
             BinDirectory = binDirectory;
             ParametricExePath = parametricExePath;
             ParametricBatPath = parametricBatPath;
             CreoInstallRoot = creoInstallRoot;
             RegistryFilePath = registryFilePath;
             PackagedPluginDirectory = packagedPluginDirectory;
+            PackagedPluginDllPath = packagedPluginDllPath;
+            PackagedTextDirectory = packagedTextDirectory;
+            DeployedPluginDirectory = deployedPluginDirectory;
             PluginDllPath = pluginDllPath;
             TextDirectory = textDirectory;
         }
 
+        public string EnvironmentId { get; }
+        public string PipeName { get; }
         public string BinDirectory { get; }
         public string ParametricExePath { get; }
         public string ParametricBatPath { get; }
         public string CreoInstallRoot { get; }
         public string RegistryFilePath { get; }
         public string PackagedPluginDirectory { get; }
+        public string PackagedPluginDllPath { get; }
+        public string PackagedTextDirectory { get; }
+        public string DeployedPluginDirectory { get; }
         public string PluginDllPath { get; }
         public string TextDirectory { get; }
     }
